@@ -1,0 +1,185 @@
+---
+# Play 1: Collect forensic data from remote hosts
+
+- name: Collect forensic inventory data
+  hosts: all
+  gather_facts: yes
+  tasks:
+
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+
+    - name: Gather all system service statuses (for "All Services")
+      shell: "systemctl list-unit-files --type=service --no-pager"
+      register: services
+      changed_when: false
+
+    - name: Gather verified running system services
+      command: "systemctl list-units --type=service --state=running --no-pager --no-legend --plain"
+      register: running_services
+      changed_when: false
+
+    - name: Gather installed packages
+      shell: "dpkg-query -l | awk '{print $2}'"
+      register: packages
+      changed_when: false
+      ignore_errors: true
+
+    - name: Get upgradable packages
+      shell: "apt list --upgradable 2>/dev/null | grep -v 'Listing...'"
+      register: upgradable_packages
+      failed_when: false
+      changed_when: false
+
+    - name: Check if Docker is installed
+      shell: |
+        if command -v docker >/dev/null 2>&1; then
+          docker --version
+          exit 0
+        else
+          exit 127
+        fi
+      register: docker_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Get running Docker containers
+      shell: "docker ps --format '{{.Names}}: {{.Image}}'"
+      register: docker_containers
+      ignore_errors: true
+      changed_when: false
+      when: docker_check.rc == 0
+
+    - name: Get listening ports
+      shell: |
+        if command -v ss >/dev/null; then
+          ss -tulnp
+        elif command -v netstat >/dev/null; then
+          netstat -tulnp
+        else
+          echo "No tool found"
+        fi
+      register: listening_ports
+      changed_when: false
+      ignore_errors: true
+
+    - name: Get firewall rules (Check for iptables or ufw)
+      shell: |
+        if command -v iptables > /dev/null; then
+          iptables -L -n -v
+        elif command -v ufw > /dev/null; then
+          ufw status
+        else
+          echo "No iptables or ufw found"
+        fi
+      register: firewall_rules
+      ignore_errors: true
+      changed_when: false
+
+    - name: Get login history
+      shell: |
+        if command -v lastlog > /dev/null; then
+          lastlog
+        else
+          echo "lastlog not found"
+        fi
+      register: lastlog
+      changed_when: false
+
+    - name: Get root cron jobs
+      shell: "crontab -l || echo 'no crontab for root'"
+      register: root_cron
+      ignore_errors: true
+      changed_when: false
+
+    - name: Get boot time
+      command: uptime -s
+      register: boot_time
+      changed_when: false
+
+    - name: Get filesystem usage
+      command: df -h
+      register: fs_usage
+      changed_when: false
+
+    - name: Set host-specific report data with sanitization
+      set_fact:
+        host_report_entry: >
+          {{
+          {
+            inventory_hostname: {
+              "hostname": ansible_hostname,
+              "ip": (ansible_default_ipv4.address | default('N/A')),
+              "os": ansible_distribution ~ " " ~ ansible_distribution_version,
+              "uptime": (ansible_uptime_seconds | int // 3600) ~ " hours",
+              "boot_time": boot_time.stdout | default('N/A') | regex_replace('\\[\\udc80-\\udcff]', ''),
+              "verified_services": (running_services.stdout_lines | default([])) | list,
+              "all_services": (services.stdout_lines | default([])) | list,
+              "packages": (packages.stdout_lines | default([])) | list,
+              "upgradable_packages": (upgradable_packages.stdout_lines | default([])) | list,
+              "docker": (docker_containers.stdout_lines | default([])) | list,
+              "listening_ports": (listening_ports.stdout_lines | default([])) | list,
+              "firewall_rules": (firewall_rules.stdout_lines | default([])) | list,
+              "login_history": (lastlog.stdout_lines | default([])) | list,
+              "cron_jobs": (root_cron.stdout_lines | default([])) | list,
+              "filesystem": (fs_usage.stdout_lines | default([])) | list
+            }
+          }
+          }}
+
+    - name: Write host report to temporary file
+      copy:
+        content: "{{ host_report_entry | to_nice_json }}"
+        dest: "{{ report_dir | default('/tmp/reports') }}/{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.report.json"
+      delegate_to: localhost
+      become: true
+
+# ----------------------------------------
+
+# Play 2: Aggregate and generate the enhanced report
+
+- name: Aggregate and generate combined enhanced report
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+
+    - name: Find all temporary report files
+      find:
+        paths: "{{ report_dir | default('/tmp/reports') }}"
+        patterns: "*.report.json"
+      register: found_reports
+
+    - name: Initialize combined report data
+      set_fact:
+        combined_report_data: {}
+
+    - name: Merge host reports
+      vars:
+        host_report: "{{ lookup('file', item.path) | from_json }}"
+      set_fact:
+        combined_report_data: "{{ combined_report_data | combine(host_report) }}"
+      loop: "{{ found_reports.files }}"
+
+    - name: Ensure reports directory exists
+      file:
+        path: "./reports"
+        state: directory
+        mode: '0755'
+
+    - name: Write combined JSON report for reference
+      copy:
+        content: "{{ combined_report_data | to_nice_json }}"
+        dest: "./reports/inventory_report_{{ ansible_date_time.iso8601 }}.json"
+
+    - name: Write enhanced HTML report
+      template:
+        src: "/root/mini-rack-ansible/templates/enhanced_report.html.j2"
+        dest: "./reports/inventory_report_{{ ansible_date_time.date }}.html"
+      vars:
+        report_data: "{{ combined_report_data }}"
+
+    - name: Cleanup old report files
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ found_reports.files }}"
