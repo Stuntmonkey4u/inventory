@@ -5,18 +5,220 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory Report</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        h1 { color: #333; }
-        .report-section { background-color: #fff; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .host-details { margin-bottom: 15px; }
-        .host-title { color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-        th { background-color: #e9e9e9; }
-        pre { background-color: #eee; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        :root {
+            --bg-color-dark: #1a1a1a; /* Slightly less intense black */
+            --text-color-dark: #e0e0e0;
+            --header-text-color-dark: #ffffff; /* Brighter for main headers */
+            --section-bg-dark: #2c2c2c; /* Darker gray for sections */
+            --border-color-dark: #444444;
+            --table-header-bg-dark: #383838;
+            --summary-bg-dark: #333; /* Slightly different for summary */
+            --pre-bg-dark: #222222; /* Darker than section for contrast */
+            --pre-text-dark: #d0d0d0;
+            --link-color-dark: #68a0cf; /* Light blue for links */
+            --button-bg-dark: #383838;
+            --button-text-dark: #e0e0e0;
+            --shadow-color-dark: rgba(0,0,0,0.5);
+
+            --bg-color-light: #f4f4f4;
+            --text-color-light: #333333;
+            --header-text-color-light: #000000;
+            --section-bg-light: #ffffff;
+            --border-color-light: #dddddd;
+            --table-header-bg-light: #e9e9e9;
+            --summary-bg-light: #e0e0e0; /* Slightly different for summary */
+            --pre-bg-light: #eeeeee;
+            --pre-text-light: #333333;
+            --link-color-light: #007bff;
+            --button-bg-light: #e0e0e0;
+            --button-text-light: #333333;
+            --shadow-color-light: rgba(0,0,0,0.1);
+
+            /* Default to dark theme */
+            --current-bg-color: var(--bg-color-dark);
+            --current-text-color: var(--text-color-dark);
+            --current-header-text-color: var(--header-text-color-dark);
+            --current-section-bg: var(--section-bg-dark);
+            --current-border-color: var(--border-color-dark);
+            --current-table-header-bg: var(--table-header-bg-dark);
+            --current-summary-bg: var(--summary-bg-dark);
+            --current-pre-bg: var(--pre-bg-dark);
+            --current-pre-text: var(--pre-text-dark);
+            --current-link-color: var(--link-color-dark);
+            --current-button-bg: var(--button-bg-dark);
+            --current-button-text: var(--button-text-dark);
+            --current-shadow-color: var(--shadow-color-dark);
+        }
+
+        body.light-theme {
+            --current-bg-color: var(--bg-color-light);
+            --current-text-color: var(--text-color-light);
+            --current-header-text-color: var(--header-text-color-light);
+            --current-section-bg: var(--section-bg-light);
+            --current-border-color: var(--border-color-light);
+            --current-table-header-bg: var(--table-header-bg-light);
+            --current-summary-bg: var(--summary-bg-light);
+            --current-pre-bg: var(--pre-bg-light);
+            --current-pre-text: var(--pre-text-light);
+            --current-link-color: var(--link-color-light);
+            --current-button-bg: var(--button-bg-light);
+            --current-button-text: var(--button-text-light);
+            --current-shadow-color: var(--shadow-color-light);
+        }
+
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: var(--current-bg-color);
+            color: var(--current-text-color);
+            line-height: 1.6;
+        }
+
+        h1, h2 { /* Removed h3 as it's now in summary */
+            color: var(--current-header-text-color);
+        }
+        h2.host-title {
+             color: var(--current-header-text-color);
+             border-bottom: 1px solid var(--current-border-color);
+             padding-bottom: 5px;
+        }
+
+        .report-section {
+            background-color: var(--current-section-bg);
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px var(--current-shadow-color);
+            border: 1px solid var(--current-border-color);
+        }
+
+        .host-details {
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid var(--current-border-color);
+        }
+
+        th {
+            background-color: var(--current-table-header-bg);
+            color: var(--current-header-text-color);
+        }
+
+        pre {
+            background-color: var(--current-pre-bg);
+            color: var(--current-pre-text);
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid var(--current-border-color);
+            margin-top: 10px; /* Ensure pre has margin if it's direct child */
+        }
+
+        a {
+            color: var(--current-link-color);
+        }
+
+        strong {
+            color: var(--current-header-text-color);
+        }
+
+        #theme-toggle {
+            background-color: var(--current-button-bg);
+            color: var(--current-button-text);
+            border: 1px solid var(--current-border-color);
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        #theme-toggle:hover {
+            opacity: 0.8;
+        }
+
+        /* Styles for details and summary */
+        details {
+            margin-bottom: 15px; /* Space between collapsible sections */
+            padding: 0; /* Reset padding as content will have its own */
+            border: 1px solid var(--current-border-color);
+            border-radius: 5px;
+            background-color: var(--current-section-bg); /* Match section or slightly different */
+        }
+
+        details[open] {
+             padding-bottom: 10px; /* Add padding when open for content below summary */
+        }
+
+        summary {
+            cursor: pointer;
+            padding: 12px 15px; /* Increased padding */
+            background-color: var(--current-summary-bg);
+            color: var(--current-header-text-color);
+            font-weight: bold; /* Make summary text bold like h3 */
+            border-radius: 4px; /* Slightly rounded corners for summary */
+            margin-bottom: 0; /* Remove default margin */
+            outline: none;
+        }
+
+        summary:hover, summary:focus {
+            opacity: 0.9;
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid var(--current-border-color);
+            border-bottom-left-radius: 0; /* Sharpen corners when open */
+            border-bottom-right-radius: 0;
+            margin-bottom: 10px; /* Space between summary and its content when open */
+        }
+
+        /* Content inside details (tables, pre, p) should have top margin */
+        details > table,
+        details > pre,
+        details > p,
+        details > ul { /* Assuming ul might be used in future */
+            margin-top: 0; /* Reset default if any */
+            padding-left: 15px; /* Indent content slightly */
+            padding-right: 15px;
+        }
+        details > p { /* For "No data" messages */
+             color: var(--current-text-color); /* Ensure it uses the right text color */
+        }
+
+        /* Styling for nested details */
+        details.nested-details {
+            margin-left: 25px; /* Indent nested details block */
+            margin-top: 10px;  /* Space from the table above or parent summary */
+            border-left: 2px solid var(--current-link-color); /* Accent border */
+            background-color: var(--current-bg-color); /* Slightly different background from parent details */
+        }
+        details.nested-details summary {
+            font-size: 0.9em; /* Smaller font for nested summary */
+            background-color: var(--current-section-bg); /* Less prominent background, like a sub-header */
+            padding: 8px 15px; /* Adjust padding for smaller summary */
+        }
+        details.nested-details[open] summary {
+            margin-bottom: 8px; /* Adjust space for nested content */
+        }
+        details.nested-details > table {
+            margin-top: 5px; /* Space between nested summary and its table */
+        }
+
     </style>
 </head>
 <body>
+    <button id="theme-toggle">Toggle Theme</button>
     <h1>Network Inventory Report - {{ ansible_date_time.date }}</h1>
 
     <div class="report-section">
@@ -36,144 +238,204 @@
             <p><strong>Boot Time:</strong> {{ details.boot_time }}</p>
         </div>
 
-        <h3>Verified Running Services</h3>
-        {% if details.verified_services %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Service</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in details.verified_services %}
-                    <tr>
-                        <td>{{ item }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No running services found or data not available.</p>
-        {% endif %}
+        <details>
+            <summary>Verified Running Services</summary>
+            {% if details.verified_services %}
+                {% set services_list = details.verified_services %}
+                {% set total_services = services_list | length %}
+                <table>
+                    <thead>
+                        <tr><th>Service</th></tr>
+                    </thead>
+                    <tbody>
+                    {% for item in services_list[:20] %} {# Display top 20 #}
+                        <tr><td>{{ item }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% if total_services > 20 %}
+                    <details class="nested-details">
+                        <summary>Show {{ total_services - 20 }} more services...</summary>
+                        <table>
+                            <thead>
+                                <tr><th>Service</th></tr>
+                            </thead>
+                            <tbody>
+                            {% for item in services_list[20:] %} {# Display remaining #}
+                                <tr><td>{{ item }}</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </details>
+                {% endif %}
+            {% else %}
+                <p>No running services found or data not available.</p>
+            {% endif %}
+        </details>
 
-        <h3>All Services</h3>
-        {% if details.all_services %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Service</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in details.all_services %}
-                    <tr>
-                        <td>{{ item }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No service data available.</p>
-        {% endif %}
+        <details>
+            <summary>All Services</summary>
+            {% if details.all_services %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.all_services %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No service data available.</p>
+            {% endif %}
+        </details>
 
-        <h3>Installed Packages</h3>
-        {% if details.packages %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Package Name</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in details.packages %}
-                    <tr>
-                        <td>{{ item }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No package data available.</p>
-        {% endif %}
+        <details>
+            <summary>Installed Packages</summary>
+            {% if details.packages %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Package Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.packages %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No package data available.</p>
+            {% endif %}
+        </details>
 
-        <h3>Upgradable Packages</h3>
-        {% if details.upgradable_packages %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Package Name</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in details.upgradable_packages %}
-                    <tr>
-                        <td>{{ item }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No upgradable packages found.</p>
-        {% endif %}
+        <details>
+            <summary>Upgradable Packages</summary>
+            {% if details.upgradable_packages %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Package Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.upgradable_packages %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No upgradable packages found.</p>
+            {% endif %}
+        </details>
 
-        <h3>Docker Containers</h3>
-        {% if details.docker %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Container Name: Image</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in details.docker %}
-                    <tr>
-                        <td>{{ item }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No Docker containers found or Docker not installed.</p>
-        {% endif %}
+        <details>
+            <summary>Docker Containers</summary>
+            {% if details.docker %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Container Name: Image</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.docker %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No Docker containers found or Docker not installed.</p>
+            {% endif %}
+        </details>
 
-        <h3>Listening Ports</h3>
-        {% if details.listening_ports %}
-            <pre>{{ details.listening_ports | join('\n') }}</pre>
-        {% else %}
-            <p>No listening port data available.</p>
-        {% endif %}
+        <details>
+            <summary>Listening Ports</summary>
+            {% if details.listening_ports %}
+                <pre>{{ details.listening_ports | join('\n') }}</pre>
+            {% else %}
+                <p>No listening port data available.</p>
+            {% endif %}
+        </details>
 
-        <h3>Firewall Rules</h3>
-        {% if details.firewall_rules %}
-            <pre>{{ details.firewall_rules | join('\n') }}</pre>
-        {% else %}
-            <p>No firewall rule data available.</p>
-        {% endif %}
+        <details>
+            <summary>Firewall Rules</summary>
+            {% if details.firewall_rules %}
+                <pre>{{ details.firewall_rules | join('\n') }}</pre>
+            {% else %}
+                <p>No firewall rule data available.</p>
+            {% endif %}
+        </details>
 
-        <h3>Login History</h3>
-        {% if details.login_history %}
-            <pre>{{ details.login_history | join('\n') }}</pre>
-        {% else %}
-            <p>No login history data available.</p>
-        {% endif %}
+        <details>
+            <summary>Login History</summary>
+            {% if details.login_history %}
+                <pre>{{ details.login_history | join('\n') }}</pre>
+            {% else %}
+                <p>No login history data available.</p>
+            {% endif %}
+        </details>
 
-        <h3>Root Cron Jobs</h3>
-        {% if details.cron_jobs %}
-            <pre>{{ details.cron_jobs | join('\n') }}</pre>
-        {% else %}
-            <p>No root cron jobs found.</p>
-        {% endif %}
+        <details>
+            <summary>Root Cron Jobs</summary>
+            {% if details.cron_jobs %}
+                <pre>{{ details.cron_jobs | join('\n') }}</pre>
+            {% else %}
+                <p>No root cron jobs found.</p>
+            {% endif %}
+        </details>
 
-        <h3>Filesystem Usage</h3>
-        {% if details.filesystem %}
-            <pre>{{ details.filesystem | join('\n') }}</pre>
-        {% else %}
-            <p>No filesystem usage data available.</p>
-        {% endif %}
+        <details>
+            <summary>Filesystem Usage</summary>
+            {% if details.filesystem %}
+                <pre>{{ details.filesystem | join('\n') }}</pre>
+            {% else %}
+                <p>No filesystem usage data available.</p>
+            {% endif %}
+        </details>
     </div>
     {% else %}
     <p>No hosts found in the report.</p>
     {% endfor %}
 
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const themeToggle = document.getElementById('theme-toggle');
+            const body = document.body;
+            const currentTheme = localStorage.getItem('theme');
+
+            // Apply saved theme on load
+            if (currentTheme === 'light') {
+                body.classList.add('light-theme');
+                themeToggle.textContent = 'Switch to Dark Mode'; // Update button text
+            } else {
+                body.classList.remove('light-theme'); // Default to dark
+                themeToggle.textContent = 'Switch to Light Mode'; // Update button text
+            }
+
+            themeToggle.addEventListener('click', function () {
+                body.classList.toggle('light-theme');
+                if (body.classList.contains('light-theme')) {
+                    localStorage.setItem('theme', 'light');
+                    themeToggle.textContent = 'Switch to Dark Mode';
+                } else {
+                    localStorage.setItem('theme', 'dark');
+                    themeToggle.textContent = 'Switch to Light Mode';
+                }
+            });
+        });
+    </script>
 </body>
 </html>
