@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Report</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #333; }
+        .report-section { background-color: #fff; margin-bottom: 20px; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .host-details { margin-bottom: 15px; }
+        .host-title { color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+        th { background-color: #e9e9e9; }
+        pre { background-color: #eee; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>Network Inventory Report - {{ ansible_date_time.date }}</h1>
+
+    <div class="report-section">
+        <h2>Report Summary</h2>
+        <p><strong>Report Generated:</strong> {{ ansible_date_time.iso8601 }}</p>
+        <p><strong>Total Hosts Processed:</strong> {{ report_data.items() | length }}</p>
+    </div>
+
+    {% for host, details in report_data.items() %}
+    <div class="report-section">
+        <h2 class="host-title">Host: {{ host }}</h2>
+        <div class="host-details">
+            <p><strong>Hostname:</strong> {{ details.hostname }}</p>
+            <p><strong>IP Address:</strong> {{ details.ip }}</p>
+            <p><strong>Operating System:</strong> {{ details.os }}</p>
+            <p><strong>Uptime:</strong> {{ details.uptime }}</p>
+            <p><strong>Boot Time:</strong> {{ details.boot_time }}</p>
+        </div>
+
+        <h3>Verified Running Services</h3>
+        {% if details.verified_services %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in details.verified_services %}
+                    <tr>
+                        <td>{{ item }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No running services found or data not available.</p>
+        {% endif %}
+
+        <h3>All Services</h3>
+        {% if details.all_services %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in details.all_services %}
+                    <tr>
+                        <td>{{ item }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No service data available.</p>
+        {% endif %}
+
+        <h3>Installed Packages</h3>
+        {% if details.packages %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Package Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in details.packages %}
+                    <tr>
+                        <td>{{ item }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No package data available.</p>
+        {% endif %}
+
+        <h3>Upgradable Packages</h3>
+        {% if details.upgradable_packages %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Package Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in details.upgradable_packages %}
+                    <tr>
+                        <td>{{ item }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No upgradable packages found.</p>
+        {% endif %}
+
+        <h3>Docker Containers</h3>
+        {% if details.docker %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Container Name: Image</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in details.docker %}
+                    <tr>
+                        <td>{{ item }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No Docker containers found or Docker not installed.</p>
+        {% endif %}
+
+        <h3>Listening Ports</h3>
+        {% if details.listening_ports %}
+            <pre>{{ details.listening_ports | join('\n') }}</pre>
+        {% else %}
+            <p>No listening port data available.</p>
+        {% endif %}
+
+        <h3>Firewall Rules</h3>
+        {% if details.firewall_rules %}
+            <pre>{{ details.firewall_rules | join('\n') }}</pre>
+        {% else %}
+            <p>No firewall rule data available.</p>
+        {% endif %}
+
+        <h3>Login History</h3>
+        {% if details.login_history %}
+            <pre>{{ details.login_history | join('\n') }}</pre>
+        {% else %}
+            <p>No login history data available.</p>
+        {% endif %}
+
+        <h3>Root Cron Jobs</h3>
+        {% if details.cron_jobs %}
+            <pre>{{ details.cron_jobs | join('\n') }}</pre>
+        {% else %}
+            <p>No root cron jobs found.</p>
+        {% endif %}
+
+        <h3>Filesystem Usage</h3>
+        {% if details.filesystem %}
+            <pre>{{ details.filesystem | join('\n') }}</pre>
+        {% else %}
+            <p>No filesystem usage data available.</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <p>No hosts found in the report.</p>
+    {% endfor %}
+
+</body>
+</html>
