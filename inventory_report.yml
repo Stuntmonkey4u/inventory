@@ -6,6 +6,15 @@
   gather_facts: true # yaml[truthy]
   tasks:
 
+    - name: Ensure temporary report directory exists on controller
+      ansible.builtin.file:
+        path: "{{ report_dir | default('/tmp/reports') }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+      become: true
+
     - name: Gather Service Information
       tags: services
       block:
@@ -50,7 +59,7 @@
           ignore_errors: true # yaml[truthy]
 
         - name: Get running Docker containers
-          ansible.builtin.shell: "docker ps --format '{{.Names}}: {{.Image}}'" # noqa jinja[invalid] <- Linter struggles with Go template
+          ansible.builtin.shell: "docker ps --format '{{ '{{' }}.Names}}: {{ '{{' }}.Image}}'" # noqa jinja[invalid] <- Linter struggles with Go template
           register: docker_containers
           when: docker_check.rc == 0
           changed_when: false
