@@ -1,0 +1,41 @@
+---
+# .ansible-lint
+# Configuration for ansible-lint
+
+# Profile to use (e.g., min, basic, moderate, safety, strict, production)
+# Default is 'moderate' if not set. Some rules are profile-specific.
+# profile: moderate
+
+# List of rules to skip entirely.
+# Format: rule_id[tag1,tag2] (tags are optional)
+skip_list:
+  - jinja[invalid]  # Skipping due to false positive with Docker Go template format.
+  # The following are more involved fixes or stylistic choices that might be addressed later:
+  - command-instead-of-module # Playbook uses systemctl commands directly for simplicity.
+  - ignore-errors             # Using ignore_errors for resilience; failed_when could be more specific but more verbose.
+  # - yaml[line-length]       # Some lines might remain long for readability of commands/comments.
+  # - key-order[task]         # While good practice, not fixing all instances for now.
+
+# Example of how to exclude specific paths:
+# exclude_paths:
+#   - .cache/
+#   - .git/
+#   - .venv/
+
+# You can also configure specific rule behaviors if needed, for example:
+# rules:
+#   line-length:
+#     max: 180 # Default is 160
+#   no-handler:
+#     level: warning # Change error to warning for this rule
+#   var-naming:
+#     pattern: "^[a-z_][a-z0-9_]*$" # Default snake_case
+#     ignore_list: # variables to ignore for this rule
+#       - 자동_生成的_host_report_entry # Example, not in current playbook
+#       - hostReportEntry # Example
+#
+# For more configuration options, see:
+# https://ansible-lint.readthedocs.io/en/latest/configuring/
+#
+# This configuration aims to reduce noise from certain stylistic or context-dependent rules
+# while still catching more critical issues.
