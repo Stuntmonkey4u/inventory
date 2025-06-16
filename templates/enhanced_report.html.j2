@@ -237,7 +237,7 @@
         <p><strong>Total Hosts Processed:</strong> {{ report_data.items() | length }}</p>
     </div>
 
-    {% for host, details in report_data.items() %}
+    {% for host, details in report_data | dictsort %}
     <div class="report-section">
         <h2 class="host-title">Host: {{ host }}</h2>
         <div class="host-details">
@@ -454,6 +454,39 @@
     {% endfor %}
 
     <script>
+    function naturalSort(a, b) {
+        // Function to compare two parts, one from a and one from b
+        const compareChunks = (chunkA, chunkB) => {
+            const numA = parseInt(chunkA, 10);
+            const numB = parseInt(chunkB, 10);
+
+            // If both are numbers, compare them numerically
+            if (!isNaN(numA) && !isNaN(numB)) {
+                if (numA !== numB) return numA - numB;
+                // If numbers are equal (e.g. leading zeros 01 vs 1), might need to check original string length if that matters
+                // For simple natural sort, equal numbers are equal.
+                return 0;
+            }
+            // If one or both are not numbers, compare them as strings
+            return chunkA.localeCompare(chunkB);
+        };
+
+        // Regex to split strings into alternating non-digit and digit sequences
+        const re = /(\d+)/g;
+        const partsA = String(a).split(re).filter(Boolean); // filter(Boolean) removes empty strings
+        const partsB = String(b).split(re).filter(Boolean);
+
+        const len = Math.min(partsA.length, partsB.length);
+        for (let i = 0; i < len; i++) {
+            const comparisonResult = compareChunks(partsA[i], partsB[i]);
+            if (comparisonResult !== 0) {
+                return comparisonResult;
+            }
+        }
+        // If all common parts are equal, the shorter string (fewer parts) comes first
+        return partsA.length - partsB.length;
+    }
+
         document.addEventListener('DOMContentLoaded', function () {
             const themeToggle = document.getElementById('theme-toggle');
             const body = document.body;
@@ -574,6 +607,27 @@
                     sortTableByColumn(tableElement, headerIndex, sortAscending);
                 });
             });
+
+            // Natural Sort for Host Sections
+            const hostSectionsContainer = document.body; // Host sections are direct children of body in this structure
+            const hostSections = Array.from(hostSectionsContainer.querySelectorAll('div.report-section'));
+
+            const actualHostReportSections = hostSections.filter(section => section.querySelector('h2.host-title'));
+
+            if (actualHostReportSections.length > 0) {
+                const sortableHosts = actualHostReportSections.map(section => {
+                    const titleElement = section.querySelector('h2.host-title');
+                    const hostname = titleElement ? titleElement.textContent.replace('Host: ', '').trim() : '';
+                    return { element: section, hostname: hostname };
+                });
+
+                sortableHosts.sort((a, b) => naturalSort(a.hostname, b.hostname));
+
+                const parentOfHostSections = actualHostReportSections[0].parentNode;
+                sortableHosts.forEach(sortedHost => {
+                    parentOfHostSections.appendChild(sortedHost.element);
+                });
+            }
         });
     </script>
 </body>
