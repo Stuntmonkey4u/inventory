@@ -4,6 +4,13 @@
 - name: Collect forensic inventory data
   hosts: all
   gather_facts: true # yaml[truthy]
+  vars:
+    collect_services_info: true
+    collect_packages_info: true
+    collect_docker_info: true
+    collect_network_info: true
+    collect_user_logs_info: true
+    collect_system_info: true # For boot time and fs_usage
   tasks:
 
     - name: Ensure temporary report directory exists on controller
@@ -29,6 +36,7 @@
           register: running_services
           changed_when: false
           ignore_errors: true # yaml[truthy]
+      when: collect_services_info
 
     - name: Gather Package Information
       tags: packages
@@ -55,6 +63,7 @@
               Upgradable packages stderr: {{ upgradable_packages.stderr }}
               Upgradable packages stdout: {{ upgradable_packages.stdout }}
           when: upgradable_packages.stderr is defined and upgradable_packages.stderr != ""
+      when: collect_packages_info
 
     - name: Gather Docker Information
       tags: docker
@@ -77,6 +86,7 @@
           when: docker_check.rc == 0
           changed_when: false
           ignore_errors: true # yaml[truthy]
+      when: collect_docker_info
 
     - name: Gather Network Information
       tags: network
@@ -96,7 +106,7 @@
 
         - name: Gather Firewall Information
           tags: firewall
-          block:
+          block: # This inner block for a single task is fine
             - name: Get firewall rules (Check for iptables or ufw)
               ansible.builtin.shell: |
                 if command -v iptables > /dev/null; then
@@ -109,6 +119,7 @@
               register: firewall_rules
               changed_when: false
               ignore_errors: true # yaml[truthy]
+      when: collect_network_info # This 'when' applies to the entire outer block
 
     - name: Gather User and Log Information
       tags: user_logs
@@ -129,6 +140,7 @@
           register: root_cron
           changed_when: false
           ignore_errors: true # yaml[truthy]
+      when: collect_user_logs_info
 
     - name: Gather System Information
       tags: system
@@ -144,6 +156,7 @@
           register: fs_usage
           changed_when: false
           ignore_errors: true # yaml[truthy]
+      when: collect_system_info
 
     - name: Set host-specific report data with sanitization
       ansible.builtin.set_fact:
@@ -155,17 +168,23 @@
               "ip": (ansible_default_ipv4.address | default('N/A')),
               "os": ansible_distribution ~ " " ~ ansible_distribution_version,
               "uptime": (ansible_uptime_seconds | int // 3600) ~ " hours",
-              "boot_time": boot_time.stdout | default('N/A') | regex_replace('\\[\\udc80-\\udcff]', ''),
-              "verified_services": (running_services.stdout_lines | default([])),
-              "all_services": (services.stdout_lines | default([])),
-              "packages": (ansible_facts.packages.keys() | list | default([])),
-              "upgradable_packages": (upgradable_packages.stdout_lines | default([])),
-              "docker": (docker_containers.stdout_lines | default([])),
-              "listening_ports": (listening_ports.stdout_lines | default([])),
-              "firewall_rules": (firewall_rules.stdout_lines | default([])),
-              "login_history": (lastlog.stdout_lines | default([])),
-              "cron_jobs": (root_cron.stdout_lines | default([])),
-              "filesystem": (fs_usage.stdout_lines | default([]))
+              "services_collected": "{{ collect_services_info }}",
+              "verified_services": (running_services.stdout_lines | default([]) if collect_services_info else "Skipped"),
+              "all_services": (services.stdout_lines | default([]) if collect_services_info else "Skipped"),
+              "packages_collected": "{{ collect_packages_info }}",
+              "packages": (ansible_facts.packages.keys() | list | default([]) if collect_packages_info else "Skipped"),
+              "upgradable_packages": (upgradable_packages.stdout_lines | default([]) if collect_packages_info else "Skipped"),
+              "docker_collected": "{{ collect_docker_info }}",
+              "docker": (docker_containers.stdout_lines | default([]) if collect_docker_info else "Skipped"),
+              "network_collected": "{{ collect_network_info }}",
+              "listening_ports": (listening_ports.stdout_lines | default([]) if collect_network_info else "Skipped"),
+              "firewall_rules": (firewall_rules.stdout_lines | default([]) if collect_network_info else "Skipped"),
+              "user_logs_collected": "{{ collect_user_logs_info }}",
+              "login_history": (lastlog.stdout_lines | default([]) if collect_user_logs_info else "Skipped"),
+              "cron_jobs": (root_cron.stdout_lines | default([]) if collect_user_logs_info else "Skipped"),
+              "system_info_collected": "{{ collect_system_info }}",
+              "boot_time": (boot_time.stdout | default('N/A') | regex_replace('\\[\\udc80-\\udcff]', '') if collect_system_info else "Skipped"),
+              "filesystem": (fs_usage.stdout_lines | default([]) if collect_system_info else "Skipped")
             }
           }
           }}

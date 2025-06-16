@@ -215,6 +215,16 @@
             margin-top: 5px; /* Space between nested summary and its table */
         }
 
+        .sortable-header {
+            cursor: pointer;
+            user-select: none; /* Optional: prevent text selection on click */
+        }
+        .sortable-header:hover {
+            background-color: var(--current-summary-bg); /* Using summary background for hover */
+        }
+        .sort-asc::after { content: " \25B2"; } /* Up arrow Unicode character */
+        .sort-desc::after { content: " \25BC"; } /* Down arrow Unicode character */
+
     </style>
 </head>
 <body>
@@ -227,7 +237,7 @@
         <p><strong>Total Hosts Processed:</strong> {{ report_data.items() | length }}</p>
     </div>
 
-    {% for host, details in report_data.items() %}
+    {% for host, details in report_data | dictsort %}
     <div class="report-section">
         <h2 class="host-title">Host: {{ host }}</h2>
         <div class="host-details">
@@ -235,17 +245,30 @@
             <p><strong>IP Address:</strong> {{ details.ip }}</p>
             <p><strong>Operating System:</strong> {{ details.os }}</p>
             <p><strong>Uptime:</strong> {{ details.uptime }}</p>
-            <p><strong>Boot Time:</strong> {{ details.boot_time }}</p>
+            <p><strong>Boot Time:</strong>
+                {% if not details.system_info_collected %}
+                    Skipped by user.
+                {% elif details.boot_time == "Skipped" or not details.boot_time %}
+                    N/A
+                {% else %}
+                    {{ details.boot_time }}
+                {% endif %}
+            </p>
         </div>
 
         <details>
             <summary>Verified Running Services</summary>
-            {% if details.verified_services %}
+            {% if not details.services_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.verified_services == "Skipped" or not details.verified_services or (details.verified_services is sequence and details.verified_services | length == 0) %}
+                <p>No running services found or data not available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter verified services..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
                 {% set services_list = details.verified_services %}
                 {% set total_services = services_list | length %}
                 <table>
                     <thead>
-                        <tr><th>Service</th></tr>
+                        <tr><th class="sortable-header">Service</th></tr>
                     </thead>
                     <tbody>
                     {% for item in services_list[:20] %} {# Display top 20 #}
@@ -258,7 +281,7 @@
                         <summary>Show {{ total_services - 20 }} more services...</summary>
                         <table>
                             <thead>
-                                <tr><th>Service</th></tr>
+                                <tr><th class="sortable-header">Service</th></tr>
                             </thead>
                             <tbody>
                             {% for item in services_list[20:] %} {# Display remaining #}
@@ -268,18 +291,21 @@
                         </table>
                     </details>
                 {% endif %}
-            {% else %}
-                <p>No running services found or data not available.</p>
             {% endif %}
         </details>
 
         <details>
             <summary>All Services</summary>
-            {% if details.all_services %}
+            {% if not details.services_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.all_services == "Skipped" or not details.all_services or (details.all_services is sequence and details.all_services | length == 0) %}
+                <p>No service data available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter all services..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
                 <table>
                     <thead>
                         <tr>
-                            <th>Service</th>
+                            <th class="sortable-header">Service</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -290,18 +316,21 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            {% else %}
-                <p>No service data available.</p>
             {% endif %}
         </details>
 
         <details>
             <summary>Installed Packages</summary>
-            {% if details.packages %}
+            {% if not details.packages_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.packages == "Skipped" or not details.packages or (details.packages is sequence and details.packages | length == 0) %}
+                <p>No package data available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
                 <table>
                     <thead>
                         <tr>
-                            <th>Package Name</th>
+                            <th class="sortable-header">Package Name</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -312,18 +341,21 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            {% else %}
-                <p>No package data available.</p>
             {% endif %}
         </details>
 
         <details>
             <summary>Upgradable Packages</summary>
-            {% if details.upgradable_packages %}
+            {% if not details.packages_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.upgradable_packages == "Skipped" or not details.upgradable_packages or (details.upgradable_packages is sequence and details.upgradable_packages | length == 0) %}
+                <p>No upgradable packages found or data not available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter upgradable packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
                 <table>
                     <thead>
                         <tr>
-                            <th>Package Name</th>
+                            <th class="sortable-header">Package Name</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -334,18 +366,21 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            {% else %}
-                <p>No upgradable packages found.</p>
             {% endif %}
         </details>
 
         <details>
             <summary>Docker Containers</summary>
-            {% if details.docker %}
+            {% if not details.docker_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.docker == "Skipped" or not details.docker or (details.docker is sequence and details.docker | length == 0) %}
+                <p>No Docker containers found, Docker not installed, or data not available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter containers..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
                 <table>
                     <thead>
                         <tr>
-                            <th>Container Name: Image</th>
+                            <th class="sortable-header">Container Name: Image</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -356,53 +391,61 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            {% else %}
-                <p>No Docker containers found or Docker not installed.</p>
             {% endif %}
         </details>
 
         <details>
             <summary>Listening Ports</summary>
-            {% if details.listening_ports %}
-                <pre>{{ details.listening_ports | join('\n') }}</pre>
+            {% if not details.network_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.listening_ports == "Skipped" or not details.listening_ports or (details.listening_ports is sequence and details.listening_ports | length == 0) %}
+                <p>No listening port data available for this host.</p>
             {% else %}
-                <p>No listening port data available.</p>
+                <pre>{{ details.listening_ports | join('\n') }}</pre>
             {% endif %}
         </details>
 
         <details>
             <summary>Firewall Rules</summary>
-            {% if details.firewall_rules %}
-                <pre>{{ details.firewall_rules | join('\n') }}</pre>
+            {% if not details.network_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.firewall_rules == "Skipped" or not details.firewall_rules or (details.firewall_rules is sequence and details.firewall_rules | length == 0) %}
+                <p>No firewall rule data available for this host.</p>
             {% else %}
-                <p>No firewall rule data available.</p>
+                <pre>{{ details.firewall_rules | join('\n') }}</pre>
             {% endif %}
         </details>
 
         <details>
             <summary>Login History</summary>
-            {% if details.login_history %}
-                <pre>{{ details.login_history | join('\n') }}</pre>
+            {% if not details.user_logs_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.login_history == "Skipped" or not details.login_history or (details.login_history is sequence and details.login_history | length == 0) %}
+                <p>No login history data available for this host.</p>
             {% else %}
-                <p>No login history data available.</p>
+                <pre>{{ details.login_history | join('\n') }}</pre>
             {% endif %}
         </details>
 
         <details>
             <summary>Root Cron Jobs</summary>
-            {% if details.cron_jobs %}
-                <pre>{{ details.cron_jobs | join('\n') }}</pre>
+            {% if not details.user_logs_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.cron_jobs == "Skipped" or not details.cron_jobs or (details.cron_jobs is sequence and details.cron_jobs | length == 0) %}
+                <p>No root cron jobs found or data not available for this host.</p>
             {% else %}
-                <p>No root cron jobs found.</p>
+                <pre>{{ details.cron_jobs | join('\n') }}</pre>
             {% endif %}
         </details>
 
         <details>
             <summary>Filesystem Usage</summary>
-            {% if details.filesystem %}
-                <pre>{{ details.filesystem | join('\n') }}</pre>
+            {% if not details.system_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.filesystem == "Skipped" or not details.filesystem or (details.filesystem is sequence and details.filesystem | length == 0) %}
+                <p>No filesystem usage data available for this host.</p>
             {% else %}
-                <p>No filesystem usage data available.</p>
+                <pre>{{ details.filesystem | join('\n') }}</pre>
             {% endif %}
         </details>
     </div>
@@ -411,6 +454,39 @@
     {% endfor %}
 
     <script>
+    function naturalSort(a, b) {
+        // Function to compare two parts, one from a and one from b
+        const compareChunks = (chunkA, chunkB) => {
+            const numA = parseInt(chunkA, 10);
+            const numB = parseInt(chunkB, 10);
+
+            // If both are numbers, compare them numerically
+            if (!isNaN(numA) && !isNaN(numB)) {
+                if (numA !== numB) return numA - numB;
+                // If numbers are equal (e.g. leading zeros 01 vs 1), might need to check original string length if that matters
+                // For simple natural sort, equal numbers are equal.
+                return 0;
+            }
+            // If one or both are not numbers, compare them as strings
+            return chunkA.localeCompare(chunkB);
+        };
+
+        // Regex to split strings into alternating non-digit and digit sequences
+        const re = /(\d+)/g;
+        const partsA = String(a).split(re).filter(Boolean); // filter(Boolean) removes empty strings
+        const partsB = String(b).split(re).filter(Boolean);
+
+        const len = Math.min(partsA.length, partsB.length);
+        for (let i = 0; i < len; i++) {
+            const comparisonResult = compareChunks(partsA[i], partsB[i]);
+            if (comparisonResult !== 0) {
+                return comparisonResult;
+            }
+        }
+        // If all common parts are equal, the shorter string (fewer parts) comes first
+        return partsA.length - partsB.length;
+    }
+
         document.addEventListener('DOMContentLoaded', function () {
             const themeToggle = document.getElementById('theme-toggle');
             const body = document.body;
@@ -435,6 +511,123 @@
                     themeToggle.textContent = 'Switch to Light Mode';
                 }
             });
+
+            const filterInputs = document.querySelectorAll('.table-filter');
+            filterInputs.forEach(input => {
+                const parentDetails = input.closest('details'); // Assumes input is within a <details> that also contains the table(s)
+                if (parentDetails) {
+                    const tablesToFilter = parentDetails.querySelectorAll('table'); // Gets all tables within this <details>
+                    if (tablesToFilter.length > 0) {
+                        input.addEventListener('keyup', function() {
+                            const filterText = input.value.toLowerCase();
+                            tablesToFilter.forEach(tableElement => {
+                                const tbody = tableElement.getElementsByTagName('tbody')[0];
+                                if (!tbody) { // Skip if table has no tbody
+                                    return;
+                                }
+                                const rows = tbody.getElementsByTagName('tr');
+                                for (let i = 0; i < rows.length; i++) {
+                                    const row = rows[i];
+                                    const cells = row.getElementsByTagName('td');
+                                    // Skip rows without TD elements
+                                    if (cells.length === 0) {
+                                        continue;
+                                    }
+                                    let rowText = '';
+                                    for (let j = 0; j < cells.length; j++) {
+                                        rowText += (cells[j].textContent || cells[j].innerText).toLowerCase();
+                                    }
+
+                                    if (rowText.indexOf(filterText) > -1) {
+                                        row.style.display = '';
+                                    } else {
+                                        row.style.display = 'none';
+                                    }
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+
+            function sortTableByColumn(table, column, asc = true) {
+                const dirModifier = asc ? 1 : -1;
+                const tbody = table.tBodies[0];
+                if (!tbody) return; // Exit if no tbody
+                const rows = Array.from(tbody.querySelectorAll("tr"));
+
+                const sortedRows = rows.sort((a, b) => {
+                    const aTd = a.querySelector(`td:nth-child(${column + 1})`);
+                    const bTd = b.querySelector(`td:nth-child(${column + 1})`);
+
+                    const aColText = aTd ? (aTd.textContent || aTd.innerText || '').trim().toLowerCase() : '';
+                    const bColText = bTd ? (bTd.textContent || bTd.innerText || '').trim().toLowerCase() : '';
+
+                    const aNum = parseFloat(aColText);
+                    const bNum = parseFloat(bColText);
+
+                    if (!isNaN(aNum) && !isNaN(bNum)) {
+                        return (aNum - bNum) * dirModifier;
+                    } else {
+                        return aColText.localeCompare(bColText) * dirModifier;
+                    }
+                });
+
+                while (tbody.firstChild) {
+                    tbody.removeChild(tbody.firstChild);
+                }
+                tbody.append(...sortedRows);
+
+                // Update header sort indicators
+                table.querySelectorAll("th.sortable-header").forEach(th => {
+                    th.classList.remove("sort-asc", "sort-desc");
+                    if (th.cellIndex === column) { // cellIndex is the property for column index
+                        th.classList.toggle("sort-asc", asc);
+                        th.classList.toggle("sort-desc", !asc);
+                    }
+                });
+            }
+
+            document.querySelectorAll("th.sortable-header").forEach(headerCell => {
+                headerCell.addEventListener("click", () => {
+                    const tableElement = headerCell.closest("table");
+                    if (!tableElement) return; // Exit if no table found
+                    const headerIndex = headerCell.cellIndex; // More direct way to get column index
+
+                    let sortAscending = true; // Default: first click sorts ascending
+                    if (headerCell.classList.contains("sort-asc")) {
+                        // If current is ascending, next sort will be descending
+                        sortAscending = false;
+                    } else if (headerCell.classList.contains("sort-desc")) {
+                        // If current is descending, next sort will be ascending
+                        sortAscending = true;
+                    }
+                    // If no sort class is present (first click on this header), it will sort ascending as per default.
+
+                    sortTableByColumn(tableElement, headerIndex, sortAscending);
+                });
+            });
+
+            // Natural Sort for Host Sections
+            const hostSectionsContainer = document.body; // Host sections are direct children of body in this structure
+            const hostSections = Array.from(hostSectionsContainer.querySelectorAll('div.report-section'));
+
+            const actualHostReportSections = hostSections.filter(section => section.querySelector('h2.host-title'));
+
+            if (actualHostReportSections.length > 0) {
+                const sortableHosts = actualHostReportSections.map(section => {
+                    const titleElement = section.querySelector('h2.host-title');
+                    const hostname = titleElement ? titleElement.textContent.replace('Host: ', '').trim() : '';
+                    return { element: section, hostname: hostname };
+                });
+
+                sortableHosts.sort((a, b) => naturalSort(a.hostname, b.hostname));
+
+                const parentOfHostSections = actualHostReportSections[0].parentNode;
+                sortableHosts.forEach(sortedHost => {
+                    parentOfHostSections.appendChild(sortedHost.element);
+                });
+            }
         });
     </script>
 </body>
