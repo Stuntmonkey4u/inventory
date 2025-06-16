@@ -38,10 +38,23 @@
           ignore_errors: true # yaml[truthy]
 
         - name: Get upgradable packages (apt systems)
-          ansible.builtin.shell: "set -o pipefail && apt list --upgradable 2>/dev/null | grep -v 'Listing...'" # risky-shell-pipe
+          ansible.builtin.shell:
+            cmd: "set -o pipefail && apt list --upgradable | grep -v 'Listing...'" # risky-shell-pipe
+            executable: /bin/bash
           register: upgradable_packages
-          failed_when: false # Task doesn't fail if no upgradable packages or command fails
+          failed_when: >
+            upgradable_packages.rc != 0 and
+            'Listing...' not in upgradable_packages.stderr and
+            'WARNING: apt does not have a stable CLI interface' not in upgradable_packages.stderr
           changed_when: false
+
+        - name: Debug upgradable packages output
+          ansible.builtin.debug:
+            msg: |
+              Upgradable packages rc: {{ upgradable_packages.rc }}
+              Upgradable packages stderr: {{ upgradable_packages.stderr }}
+              Upgradable packages stdout: {{ upgradable_packages.stdout }}
+          when: upgradable_packages.stderr is defined and upgradable_packages.stderr != ""
 
     - name: Gather Docker Information
       tags: docker
