@@ -30,6 +30,10 @@ The playbook collects the following types of information:
 *   **User and Log Information:**
     *   Login history (`lastlog`)
     *   Root user's cron jobs (`crontab -l`)
+*   **File Integrity Monitoring (with AIDE - Advanced Intrusion Detection Environment):**
+    *   If enabled, initializes an AIDE baseline on the first run for a host (stored on the Ansible controller).
+    *   Subsequent runs check file integrity against this baseline.
+    *   Reports new, removed, or changed files.
 
 ## Prerequisites
 
@@ -80,6 +84,18 @@ Each playbook run creates new timestamped/dated report files.
     ansible-playbook -i <inventory_file> inventory_report.yml -e "report_dir=/custom/path/reports"
     ```
     Ensure the specified directory is writable by the user running Ansible on the control node (for Play 2 tasks). The temporary files created by Play 1 on the control node (if `report_dir` is customized for that too) also need to be writable.
+
+*   **Controlling Data Collection:** Specific data collection features can be enabled or disabled by passing variables. For example, to disable Docker and Lynis/Rkhunter/AIDE collection:
+    ```bash
+    ansible-playbook -i <inventory_file> inventory_report.yml -e "collect_docker_info=false collect_lynis_info=false collect_rkhunter_info=false collect_aide_info=false"
+    ```
+    By default, most collection features are enabled. Refer to the `vars` section in `inventory_report.yml` for available flags (e.g., `collect_services_info`, `collect_packages_info`, `collect_network_info`, `collect_user_logs_info`, `collect_system_info`, `collect_lynis_info`, `collect_rkhunter_info`, `collect_aide_info`).
+
+*   **AIDE Baseline Management:**
+    *   When AIDE collection is enabled (`collect_aide_info: true`, default), the playbook manages AIDE baselines on the Ansible controller.
+    *   On the first run for a host, AIDE is initialized on the target, and its baseline database (e.g., `inventory_hostname.db.gz`) is fetched to the `./aide_baselines/` directory (created relative to your playbook execution path).
+    *   On subsequent runs, this stored baseline is copied to the target, and `aide --check` is performed against it.
+    *   **Important:** The `./aide_baselines/` directory on your Ansible controller should be considered sensitive and managed appropriately (e.g., backed up). If you delete a host's baseline file from this directory, the playbook will re-initialize AIDE on that host during the next run. To accept current changes on a host as the new baseline, you would delete its old baseline file from `./aide_baselines/` on the controller, and let the playbook generate a new one on the next execution.
 
 ## Minimal Dependencies
 
