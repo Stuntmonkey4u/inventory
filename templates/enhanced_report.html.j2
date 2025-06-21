@@ -439,6 +439,54 @@
         </details>
 
         <details>
+            <summary>Lynis Scan Results</summary>
+            {% if not details.lynis_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.lynis_status == "Tool not found" %}
+                <p>Lynis tool not found on the host. Scan not performed.</p>
+            {% elif details.lynis_status == "Scan not run" %}
+                <p>Lynis scan did not run. Please check playbook logic or tool availability.</p>
+            {% elif details.lynis_status == "Error during run" %}
+                <p>An error occurred during the Lynis scan. Output may be incomplete or unavailable.</p>
+                {% if details.lynis_output and details.lynis_output | length > 0 %}
+                    <pre>{{ details.lynis_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured.</p>
+                {% endif %}
+            {% elif details.lynis_status == "No output" %}
+                <p>Lynis scan ran but produced no output.</p>
+            {% elif details.lynis_status == "Collected" and details.lynis_output and details.lynis_output | length > 0 %}
+                <pre>{{ details.lynis_output | join('\n') }}</pre>
+            {% else %}
+                <p>Lynis scan data is unavailable or status is unknown: {{ details.lynis_status }}</p>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Rkhunter Scan Results</summary>
+            {% if not details.rkhunter_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.rkhunter_status == "Tool not found" %}
+                <p>Rkhunter tool not found on the host. Scan not performed.</p>
+            {% elif details.rkhunter_status == "Scan not run" %}
+                <p>Rkhunter scan did not run. Please check playbook logic or tool availability.</p>
+            {% elif details.rkhunter_status == "Error during run" %}
+                <p>An error occurred during the Rkhunter scan. Output may be incomplete or unavailable.</p>
+                {% if details.rkhunter_output and details.rkhunter_output | length > 0 %}
+                    <pre>{{ details.rkhunter_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured.</p>
+                {% endif %}
+            {% elif details.rkhunter_status == "No output" %}
+                <p>Rkhunter scan ran but produced no output.</p>
+            {% elif details.rkhunter_status == "Collected" and details.rkhunter_output and details.rkhunter_output | length > 0 %}
+                <pre>{{ details.rkhunter_output | join('\n') }}</pre>
+            {% else %}
+                <p>Rkhunter scan data is unavailable or status is unknown: {{ details.rkhunter_status }}</p>
+            {% endif %}
+        </details>
+
+        <details>
             <summary>Filesystem Usage</summary>
             {% if not details.system_info_collected %}
                 <p>Data collection for this section was skipped by the user.</p>

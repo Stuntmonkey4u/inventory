@@ -11,6 +11,8 @@
     collect_network_info: true
     collect_user_logs_info: true
     collect_system_info: true # For boot time and fs_usage
+    collect_lynis_info: true
+    collect_rkhunter_info: true
   tasks:
 
     - name: Ensure temporary report directory exists on controller
@@ -158,6 +160,61 @@
           ignore_errors: true # yaml[truthy]
       when: collect_system_info
 
+    - name: Perform Security Scans (Lynis, Rkhunter)
+      tags: security_scans
+      block:
+        - name: Ensure security scan tools are installed (lynis, rkhunter)
+          ansible.builtin.package:
+            name:
+              - lynis
+              - rkhunter
+            state: present
+          register: security_tools_install_result # We still register to potentially use details about install success/failure in status, though direct check is better
+          ignore_errors: true # yaml[truthy]
+          when: collect_lynis_info or collect_rkhunter_info
+
+        - name: Check if rkhunter is available
+          ansible.builtin.command: command -v rkhunter
+          register: rkhunter_exists
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when: collect_rkhunter_info
+
+        - name: Update rkhunter database (might require internet)
+          ansible.builtin.command: rkhunter --update
+          register: rkhunter_update_result
+          changed_when: "'updated' in rkhunter_update_result.stdout | lower"
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_rkhunter_info
+            - rkhunter_exists is defined and rkhunter_exists.rc == 0
+
+        - name: Check if lynis is available
+          ansible.builtin.command: command -v lynis
+          register: lynis_exists
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when: collect_lynis_info
+
+        - name: Run Lynis Scan
+          ansible.builtin.command: lynis audit system --quiet --no-colors
+          register: lynis_scan_result
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_lynis_info
+            - lynis_exists is defined and lynis_exists.rc == 0
+
+        - name: Run Rkhunter Scan
+          ansible.builtin.command: rkhunter --check --sk --nocolors
+          register: rkhunter_scan_result
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_rkhunter_info
+            - rkhunter_exists is defined and rkhunter_exists.rc == 0
+      when: collect_lynis_info or collect_rkhunter_info
+
     - name: Set host-specific report data with sanitization
       ansible.builtin.set_fact:
         host_report_entry: >
@@ -184,7 +241,33 @@
               "cron_jobs": (root_cron.stdout_lines | default([]) if collect_user_logs_info else "Skipped"),
               "system_info_collected": "{{ collect_system_info }}",
               "boot_time": (boot_time.stdout | default('N/A') | regex_replace('\\[\\udc80-\\udcff]', '') if collect_system_info else "Skipped"),
-              "filesystem": (fs_usage.stdout_lines | default([]) if collect_system_info else "Skipped")
+              "filesystem": (fs_usage.stdout_lines | default([]) if collect_system_info else "Skipped"),
+
+              "lynis_collected": "{{ collect_lynis_info }}",
+              "lynis_status": (
+                "Skipped" if not collect_lynis_info else
+                ("Tool not found" if (lynis_exists is not defined or lynis_exists.rc != 0) else
+                  ("Scan not run" if lynis_scan_result is not defined else # Should not happen if lynis_exists.rc == 0
+                   ("Error during run" if lynis_scan_result.failed or (lynis_scan_result.rc is defined and lynis_scan_result.rc != 0) else
+                    ("Collected" if lynis_scan_result.stdout_lines | length > 0 else "No output")
+                   )
+                  )
+                )
+              ),
+              "lynis_output": (lynis_scan_result.stdout_lines | default([]) if collect_lynis_info and lynis_exists is defined and lynis_exists.rc == 0 and lynis_scan_result is defined and not lynis_scan_result.failed and lynis_scan_result.rc is defined and lynis_scan_result.rc == 0 else []),
+
+              "rkhunter_collected": "{{ collect_rkhunter_info }}",
+              "rkhunter_status": (
+                "Skipped" if not collect_rkhunter_info else
+                ("Tool not found" if (rkhunter_exists is not defined or rkhunter_exists.rc != 0) else
+                  ("Scan not run" if rkhunter_scan_result is not defined else # Should not happen if rkhunter_exists.rc == 0
+                   ("Error during run" if rkhunter_scan_result.failed or (rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc != 0) else
+                    ("Collected" if rkhunter_scan_result.stdout_lines | length > 0 else "No output")
+                   )
+                  )
+                )
+              ),
+              "rkhunter_output": (rkhunter_scan_result.stdout_lines | default([]) if collect_rkhunter_info and rkhunter_exists is defined and rkhunter_exists.rc == 0 and rkhunter_scan_result is defined and not rkhunter_scan_result.failed and rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc == 0 else [])
             }
           }
           }}
