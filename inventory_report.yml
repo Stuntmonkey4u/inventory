@@ -11,6 +11,9 @@
     collect_network_info: true
     collect_user_logs_info: true
     collect_system_info: true # For boot time and fs_usage
+    collect_lynis_info: true
+    collect_rkhunter_info: true
+    collect_aide_info: true
   tasks:
 
     - name: Ensure temporary report directory exists on controller
@@ -20,7 +23,16 @@
         mode: '0755'
       delegate_to: localhost
       run_once: true
-      become: true
+      become: true # Might be needed if default /tmp/reports needs root
+
+    - name: Ensure AIDE baseline directory exists on controller
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/aide_baselines"
+        state: directory
+        mode: '0755' # Controller user needs to write here
+      delegate_to: localhost
+      run_once: true
+      # No become needed if playbook_dir is user-writable
 
     - name: Gather Service Information
       tags: services
@@ -158,6 +170,160 @@
           ignore_errors: true # yaml[truthy]
       when: collect_system_info
 
+    - name: Perform Security Scans (Lynis, Rkhunter)
+      tags: security_scans
+      block:
+        - name: Ensure security scan tools are installed (lynis, rkhunter)
+          ansible.builtin.package:
+            name:
+              - lynis
+              - rkhunter
+            state: present
+          register: security_tools_install_result # We still register to potentially use details about install success/failure in status, though direct check is better
+          ignore_errors: true # yaml[truthy]
+          when: collect_lynis_info or collect_rkhunter_info
+
+        - name: Check if rkhunter is available
+          ansible.builtin.command: command -v rkhunter
+          register: rkhunter_exists
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when: collect_rkhunter_info
+
+        - name: Update rkhunter database (might require internet)
+          ansible.builtin.command: rkhunter --update
+          register: rkhunter_update_result
+          changed_when: "'updated' in rkhunter_update_result.stdout | lower"
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_rkhunter_info
+            - rkhunter_exists is defined and rkhunter_exists.rc == 0
+
+        - name: Check if lynis is available
+          ansible.builtin.command: command -v lynis
+          register: lynis_exists
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when: collect_lynis_info
+
+        - name: Run Lynis Scan
+          ansible.builtin.command: lynis audit system --quiet --no-colors
+          register: lynis_scan_result
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_lynis_info
+            - lynis_exists is defined and lynis_exists.rc == 0
+
+        - name: Run Rkhunter Scan
+          ansible.builtin.command: rkhunter --check --sk --nocolors
+          register: rkhunter_scan_result
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+          when:
+            - collect_rkhunter_info
+            - rkhunter_exists is defined and rkhunter_exists.rc == 0
+      when: collect_lynis_info or collect_rkhunter_info
+
+    - name: Perform AIDE File Integrity Check
+      tags: aide
+      block:
+        - name: Install AIDE package
+          ansible.builtin.package:
+            name: aide # Common name, might need 'aide-common' or platform specific adjustments
+            state: present
+          register: aide_install_result
+          ignore_errors: true # yaml[truthy]
+
+        - name: Check if AIDE command is available
+          ansible.builtin.command: command -v aide
+          register: aide_exists
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+
+        - name: Set AIDE baseline path facts
+          ansible.builtin.set_fact:
+            aide_controller_baseline_path: "{{ playbook_dir }}/aide_baselines/{{ inventory_hostname }}.db.gz"
+            aide_target_temp_new_db_path: "/var/lib/aide/aide.db.new.gz" # Default AIDE output
+            aide_target_active_db_path: "/var/lib/aide/aide.db.gz" # Standard operational path
+          when: aide_exists.rc == 0
+
+        - name: Check if AIDE baseline exists on controller for this host
+          ansible.builtin.stat:
+            path: "{{ aide_controller_baseline_path }}"
+          delegate_to: localhost
+          register: aide_baseline_on_controller_stat
+          when: aide_exists.rc == 0
+
+        - name: Initialize AIDE and fetch baseline (if not on controller)
+          block:
+            - name: Ensure AIDE database directory exists on target
+              ansible.builtin.file:
+                path: "/var/lib/aide"
+                state: directory
+                mode: '0755' # Or more restrictive as AIDE recommends
+
+            - name: Initialize AIDE database on target
+              ansible.builtin.command: aide --init # or aideinit, depending on distro version of aide
+              register: aide_init_result
+              changed_when: false # Success (rc=0) implies the new DB is created at aide_target_temp_new_db_path
+              ignore_errors: true # yaml[truthy] (to capture status later)
+
+            - name: Rename newly initialized AIDE database
+              ansible.builtin.command: "mv {{ aide_target_temp_new_db_path }} {{ aide_target_active_db_path }}"
+              when: aide_init_result is defined and aide_init_result.rc == 0
+              register: aide_rename_result
+              changed_when: aide_rename_result.rc == 0
+              ignore_errors: true # yaml[truthy]
+
+            - name: Fetch AIDE baseline from target to controller
+              ansible.builtin.fetch:
+                src: "{{ aide_target_active_db_path }}" # e.g. /var/lib/aide/aide.db.gz
+                dest: "{{ aide_controller_baseline_path }}" # e.g. ./aide_baselines/hostname.db.gz
+                flat: yes # Ensures dest is treated as a file path
+                fail_on_missing: yes
+              when: aide_rename_result is defined and aide_rename_result.rc == 0
+              register: aide_fetch_result
+
+            - name: Set fact that baseline was initialized
+              ansible.builtin.set_fact:
+                aide_baseline_initialized_this_run: true
+              when: aide_fetch_result is defined and not aide_fetch_result.failed
+
+          when:
+            - aide_exists.rc == 0
+            - aide_baseline_on_controller_stat.stat.exists is defined and not aide_baseline_on_controller_stat.stat.exists
+            - aide_install_result is defined and not aide_install_result.failed # Ensure install didn't grossly fail
+
+        - name: Run AIDE Check (if baseline exists on controller)
+          block:
+            - name: Ensure AIDE database directory exists on target (again, for this path)
+              ansible.builtin.file:
+                path: "/var/lib/aide"
+                state: directory
+                mode: '0755'
+
+            - name: Copy AIDE baseline from controller to target
+              ansible.builtin.copy:
+                src: "{{ aide_controller_baseline_path }}"
+                dest: "{{ aide_target_active_db_path }}"
+                mode: '0600' # AIDE dbs should be protected
+              register: aide_copy_to_target_result
+
+            - name: Run AIDE check against the copied baseline
+              ansible.builtin.command: aide --check
+              register: aide_check_result
+              ignore_errors: true # AIDE exits >0 if changes are found or errors occur.
+              changed_when: false # This task only reads data.
+              when: aide_copy_to_target_result is defined and not aide_copy_to_target_result.failed
+
+          when:
+            - aide_exists.rc == 0
+            - aide_baseline_on_controller_stat.stat.exists is defined and aide_baseline_on_controller_stat.stat.exists
+            - aide_install_result is defined and not aide_install_result.failed
+
+      when: collect_aide_info
+
     - name: Set host-specific report data with sanitization
       ansible.builtin.set_fact:
         host_report_entry: >
@@ -184,7 +350,55 @@
               "cron_jobs": (root_cron.stdout_lines | default([]) if collect_user_logs_info else "Skipped"),
               "system_info_collected": "{{ collect_system_info }}",
               "boot_time": (boot_time.stdout | default('N/A') | regex_replace('\\[\\udc80-\\udcff]', '') if collect_system_info else "Skipped"),
-              "filesystem": (fs_usage.stdout_lines | default([]) if collect_system_info else "Skipped")
+              "filesystem": (fs_usage.stdout_lines | default([]) if collect_system_info else "Skipped"),
+
+              "lynis_collected": "{{ collect_lynis_info }}",
+              "lynis_status": (
+                "Skipped" if not collect_lynis_info else
+                ("Tool not found" if (lynis_exists is not defined or lynis_exists.rc != 0) else
+                  ("Scan not run" if lynis_scan_result is not defined else # Should not happen if lynis_exists.rc == 0
+                   ("Error during run" if lynis_scan_result.failed or (lynis_scan_result.rc is defined and lynis_scan_result.rc != 0) else
+                    ("Collected" if lynis_scan_result.stdout_lines | length > 0 else "No output")
+                   )
+                  )
+                )
+              ),
+              "lynis_output": (lynis_scan_result.stdout_lines | default([]) if collect_lynis_info and lynis_exists is defined and lynis_exists.rc == 0 and lynis_scan_result is defined and not lynis_scan_result.failed and lynis_scan_result.rc is defined and lynis_scan_result.rc == 0 else []),
+
+              "rkhunter_collected": "{{ collect_rkhunter_info }}",
+              "rkhunter_status": (
+                "Skipped" if not collect_rkhunter_info else
+                ("Tool not found" if (rkhunter_exists is not defined or rkhunter_exists.rc != 0) else
+                  ("Scan not run" if rkhunter_scan_result is not defined else # Should not happen if rkhunter_exists.rc == 0
+                   ("Error during run" if rkhunter_scan_result.failed or (rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc != 0) else
+                    ("Collected" if rkhunter_scan_result.stdout_lines | length > 0 else "No output")
+                   )
+                  )
+                )
+              ),
+              "rkhunter_output": (rkhunter_scan_result.stdout_lines | default([]) if collect_rkhunter_info and rkhunter_exists is defined and rkhunter_exists.rc == 0 and rkhunter_scan_result is defined and not rkhunter_scan_result.failed and rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc == 0 else []),
+
+              "aide_collected": "{{ collect_aide_info }}",
+              "aide_status": (
+                "Skipped" if not collect_aide_info else
+                ("Tool not found or install failed" if (aide_exists is not defined or aide_exists.rc != 0) or (aide_install_result is defined and aide_install_result.failed) else
+                  ("Baseline initialized and fetched" if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
+                    ("Baseline not found on controller (init failed or not attempted this run)" if not (aide_baseline_on_controller_stat is defined and aide_baseline_on_controller_stat.stat.exists is defined and aide_baseline_on_controller_stat.stat.exists) else
+                      ("AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" if aide_check_result is not defined else
+                        ("Error during AIDE check" if (aide_check_result.failed or aide_check_result.rc is not defined) else # .failed is true if module has critical error
+                          ("No changes found" if aide_check_result.rc == 0 else "Changes found") # Any positive RC means changes
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              "aide_output": (
+                aide_check_result.stdout_lines | default([]) if collect_aide_info and aide_check_result is defined and aide_check_result.rc is defined else
+                (["Baseline initialized, no check performed on this run."] if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
+                  ["AIDE data not available due to previous errors or status."] # Fallback message
+                )
+              )
             }
           }
           }}
