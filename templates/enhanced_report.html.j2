@@ -215,12 +215,6 @@
             margin-top: 5px; /* Space between nested summary and its table */
         }
 
-        .multi-column {
-            columns: 3;
-            -webkit-columns: 3;
-            -moz-columns: 3;
-        }
-
         .sortable-header {
             cursor: pointer;
             user-select: none; /* Optional: prevent text selection on click */
@@ -231,21 +225,6 @@
         .sort-asc::after { content: " \25B2"; } /* Up arrow Unicode character */
         .sort-desc::after { content: " \25BC"; } /* Down arrow Unicode character */
 
-        .quick-nav {
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--current-border-color);
-        }
-        .quick-nav a {
-            margin-right: 10px;
-        }
-
-        .status-good {
-            color: #8fbc8f;
-        }
-        .status-bad {
-            color: #d87093;
-        }
     </style>
 </head>
 <body>
@@ -260,7 +239,7 @@
 
     {% for host, details in report_data | dictsort %}
     <div class="report-section">
-        <h2 class="host-title">Host: {{ host | e }}</h2>
+        <h2 class="host-title">Host: {{ host }}</h2>
         <div class="host-details">
             <div class="quick-nav">
                 <a href="#services-{{ host }}">Services</a> |
@@ -271,22 +250,21 @@
                 <a href="#security-{{ host }}">Security</a> |
                 <a href="#persistence-{{ host }}">Persistence</a>
             </div>
-            <p><strong>Hostname:</strong> {{ details.hostname | e }}</p>
-            <p><strong>IP Address:</strong> {{ details.ip | e }}</p>
-            <p><strong>Operating System:</strong> {{ details.os | e }}</p>
-            <p><strong>Uptime:</strong> {{ details.uptime | e }}</p>
+            <p><strong>Hostname:</strong> {{ details.hostname }}</p>
+            <p><strong>IP Address:</strong> {{ details.ip }}</p>
+            <p><strong>Operating System:</strong> {{ details.os }}</p>
+            <p><strong>Uptime:</strong> {{ details.uptime }}</p>
             <p><strong>Boot Time:</strong>
                 {% if not details.system_info_collected %}
                     Skipped by user.
                 {% elif details.boot_time == "Skipped" or not details.boot_time %}
                     N/A
                 {% else %}
-                    {{ details.boot_time | e }}
+                    {{ details.boot_time }}
                 {% endif %}
             </p>
         </div>
 
-        <h3 id="services-{{ host }}">Services</h3>
         <details>
             <summary>Verified Running Services</summary>
             {% if not details.services_collected %}
@@ -303,7 +281,7 @@
                     </thead>
                     <tbody>
                     {% for item in services_list[:20] %} {# Display top 20 #}
-                        <tr><td>{{ item | e }}</td></tr>
+                        <tr><td>{{ item }}</td></tr>
                     {% endfor %}
                     </tbody>
                 </table>
@@ -316,253 +294,12 @@
                             </thead>
                             <tbody>
                             {% for item in services_list[20:] %} {# Display remaining #}
-                                <tr><td>{{ item | e }}</td></tr>
+                                <tr><td>{{ item }}</td></tr>
                             {% endfor %}
                             </tbody>
                         </table>
                     </details>
                 {% endif %}
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>All Services</summary>
-            {% if not details.services_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.all_services == "Skipped" or not details.all_services or (details.all_services is sequence and details.all_services | length == 0) %}
-                <p>No service data available for this host.</p>
-            {% else %}
-                <input type="text" class="table-filter" placeholder="Filter all services..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable-header">Service</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in details.all_services %}
-                        <tr>
-                            <td>{{ item | e }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            {% endif %}
-        </details>
-
-        <h3 id="packages-{{ host }}">Packages</h3>
-        <details>
-            <summary>Installed Packages</summary>
-            {% if not details.packages_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.packages == "Skipped" or not details.packages or (details.packages is sequence and details.packages | length == 0) %}
-                <p>No package data available for this host.</p>
-            {% else %}
-                <input type="text" class="table-filter" placeholder="Filter packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <div class="multi-column">
-                    <ul>
-                        {% for item in details.packages %}
-                            <li>{{ item | e }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Upgradable Packages</summary>
-            {% if not details.packages_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.upgradable_packages == "Skipped" or not details.upgradable_packages or (details.upgradable_packages is sequence and details.upgradable_packages | length == 0) %}
-                <p>No upgradable packages found or data not available for this host.</p>
-            {% else %}
-                <input type="text" class="table-filter" placeholder="Filter upgradable packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable-header">Package Name</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in details.upgradable_packages %}
-                        <tr>
-                            <td>{{ item | e }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            {% endif %}
-        </details>
-
-        <h3 id="docker-{{ host }}">Docker</h3>
-        <details>
-            <summary>Docker Containers</summary>
-            {% if not details.docker_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.docker == "Skipped" or not details.docker or (details.docker is sequence and details.docker | length == 0) %}
-                <p>No Docker containers found, Docker not installed, or data not available for this host.</p>
-            {% else %}
-                <input type="text" class="table-filter" placeholder="Filter containers..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable-header">Container Name: Image</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in details.docker %}
-                        <tr>
-                            <td>{{ item | e }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            {% endif %}
-        </details>
-
-        <h3 id="network-{{ host }}">Network</h3>
-        <details>
-            <summary>Listening Ports</summary>
-            {% if not details.network_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.listening_ports == "Skipped" or not details.listening_ports or (details.listening_ports is sequence and details.listening_ports | length == 0) %}
-                <p>No listening port data available for this host.</p>
-            {% else %}
-                <pre>{{ details.listening_ports | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Firewall Rules</summary>
-            {% if not details.network_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.firewall_rules == "Skipped" or not details.firewall_rules or (details.firewall_rules is sequence and details.firewall_rules | length == 0) %}
-                <p>No firewall rule data available for this host.</p>
-            {% else %}
-                <pre>{{ details.firewall_rules | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <h3 id="users-{{ host }}">Users</h3>
-        <details>
-            <summary>Login History</summary>
-            {% if not details.user_logs_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.login_history == "Skipped" or not details.login_history or (details.login_history is sequence and details.login_history | length == 0) %}
-                <p>No login history data available for this host.</p>
-            {% else %}
-                <pre>{{ details.login_history | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Root Cron Jobs</summary>
-            {% if not details.user_logs_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.cron_jobs == "Skipped" or not details.cron_jobs or (details.cron_jobs is sequence and details.cron_jobs | length == 0) %}
-                <p>No root cron jobs found or data not available for this host.</p>
-            {% else %}
-                <pre>{{ details.cron_jobs | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <h3 id="security-{{ host }}">Security</h3>
-        <details>
-            <summary>Lynis Scan Results</summary>
-            {% if not details.lynis_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.lynis_status == "Tool not found" %}
-                <p>Lynis tool not found on the host. Scan not performed.</p>
-            {% elif details.lynis_status == "Scan not run" %}
-                <p>Lynis scan did not run. Please check playbook logic or tool availability.</p>
-            {% elif details.lynis_status == "Error during run" %}
-                <p>An error occurred during the Lynis scan. Output may be incomplete or unavailable.</p>
-                {% if details.lynis_output and details.lynis_output | length > 0 %}
-                    <pre>{{ details.lynis_output | join('\n') | e }}</pre>
-                {% else %}
-                    <p>No specific error output captured.</p>
-                {% endif %}
-            {% elif details.lynis_status == "No output" %}
-                <p>Lynis scan ran but produced no output.</p>
-            {% elif details.lynis_status == "Collected" and details.lynis_output and details.lynis_output | length > 0 %}
-                <pre>{{ details.lynis_output | join('\n') | e }}</pre>
-            {% else %}
-                <p>Lynis scan data is unavailable or status is unknown: {{ details.lynis_status | e }}</p>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Rkhunter Scan Results</summary>
-            {% if not details.rkhunter_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.rkhunter_status == "Tool not found" %}
-                <p>Rkhunter tool not found on the host. Scan not performed.</p>
-            {% elif details.rkhunter_status == "Scan not run" %}
-                <p>Rkhunter scan did not run. Please check playbook logic or tool availability.</p>
-            {% elif details.rkhunter_status == "Error during run" %}
-                <p>An error occurred during the Rkhunter scan. Output may be incomplete or unavailable.</p>
-                {% if details.rkhunter_output and details.rkhunter_output | length > 0 %}
-                    <pre>{{ details.rkhunter_output | join('\n') | e }}</pre>
-                {% else %}
-                    <p>No specific error output captured.</p>
-                {% endif %}
-            {% elif details.rkhunter_status == "No output" %}
-                <p>Rkhunter scan ran but produced no output.</p>
-            {% elif details.rkhunter_status == "Collected" and details.rkhunter_output and details.rkhunter_output | length > 0 %}
-                <pre>{{ details.rkhunter_output | join('\n') | e }}</pre>
-            {% else %}
-                <p>Rkhunter scan data is unavailable or status is unknown: {{ details.rkhunter_status | e }}</p>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>AIDE File Integrity Check</summary>
-            {% if not details.aide_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.aide_status == "Tool not found or install failed" %}
-                <p>AIDE tool not found on the host or installation failed. Scan not performed.</p>
-            {% elif details.aide_status == "Baseline initialized and fetched" %}
-                <p>AIDE baseline was initialized on the target and fetched to the controller. No check was performed in this run. Run the playbook again to perform a check against this new baseline.</p>
-            {% elif details.aide_status == "Baseline not found on controller (init failed or not attempted this run)" %}
-                <p>AIDE baseline for this host was not found on the controller, and initialization was not successfully completed in this run. Cannot perform check.</p>
-            {% elif details.aide_status == "AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" %}
-                <p>The AIDE check task did not run. This might be due to an issue copying the baseline to the target or an AIDE command problem.</p>
-            {% elif details.aide_status == "Error during AIDE check" %}
-                <p class="status-bad">An error occurred during the AIDE check. Output may be incomplete or unavailable.</p>
-                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
-                    <pre>{{ details.aide_output | join('\n') | e }}</pre>
-                {% else %}
-                    <p>No specific error output captured, or AIDE data was not available.</p>
-                {% endif %}
-            {% elif details.aide_status == "No changes found" %}
-                <p class="status-good">AIDE check ran successfully. No file changes detected against the baseline.</p>
-                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
-                    {# AIDE might still have some summary output even with no changes #}
-                    <pre>{{ details.aide_output | join('\n') | e }}</pre>
-                {% endif %}
-            {% elif details.aide_status == "Changes found" %}
-                <p class="status-bad">AIDE check ran successfully. File changes were detected against the baseline:</p>
-                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
-                    <pre>{{ details.aide_output | join('\n') | e }}</pre>
-                {% else %}
-                     <p>Changes detected, but output is not available. Check raw logs if necessary.</p>
-                {% endif %}
-            {% else %}
-                <p>AIDE status is unknown or data is unavailable: {{ details.aide_status | e }}</p>
-                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
-                    <pre>{{ details.aide_output | join('\n') | e }}</pre>
-                {% endif %}
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Filesystem Usage</summary>
-            {% if not details.system_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.filesystem == "Skipped" or not details.filesystem or (details.filesystem is sequence and details.filesystem | length == 0) %}
-                <p>No filesystem usage data available for this host.</p>
-            {% else %}
-                <pre>{{ details.filesystem | join('\n') | e }}</pre>
             {% endif %}
         </details>
 
@@ -640,6 +377,242 @@
                 <p>No systemd timers data available for this host.</p>
             {% else %}
                 <pre>{{ details.systemd_timers | join('\n') | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>All Services</summary>
+            {% if not details.services_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.all_services == "Skipped" or not details.all_services or (details.all_services is sequence and details.all_services | length == 0) %}
+                <p>No service data available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter all services..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable-header">Service</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.all_services %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Installed Packages</summary>
+            {% if not details.packages_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.packages == "Skipped" or not details.packages or (details.packages is sequence and details.packages | length == 0) %}
+                <p>No package data available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
+                <div class="multi-column">
+                    <ul>
+                        {% for item in details.packages %}
+                            <li>{{ item | e }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Upgradable Packages</summary>
+            {% if not details.packages_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.upgradable_packages == "Skipped" or not details.upgradable_packages or (details.upgradable_packages is sequence and details.upgradable_packages | length == 0) %}
+                <p>No upgradable packages found or data not available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter upgradable packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable-header">Package Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.upgradable_packages %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Docker Containers</summary>
+            {% if not details.docker_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.docker == "Skipped" or not details.docker or (details.docker is sequence and details.docker | length == 0) %}
+                <p>No Docker containers found, Docker not installed, or data not available for this host.</p>
+            {% else %}
+                <input type="text" class="table-filter" placeholder="Filter containers..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable-header">Container Name: Image</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in details.docker %}
+                        <tr>
+                            <td>{{ item }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Listening Ports</summary>
+            {% if not details.network_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.listening_ports == "Skipped" or not details.listening_ports or (details.listening_ports is sequence and details.listening_ports | length == 0) %}
+                <p>No listening port data available for this host.</p>
+            {% else %}
+                <pre>{{ details.listening_ports | join('\n') }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Firewall Rules</summary>
+            {% if not details.network_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.firewall_rules == "Skipped" or not details.firewall_rules or (details.firewall_rules is sequence and details.firewall_rules | length == 0) %}
+                <p>No firewall rule data available for this host.</p>
+            {% else %}
+                <pre>{{ details.firewall_rules | join('\n') }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Login History</summary>
+            {% if not details.user_logs_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.login_history == "Skipped" or not details.login_history or (details.login_history is sequence and details.login_history | length == 0) %}
+                <p>No login history data available for this host.</p>
+            {% else %}
+                <pre>{{ details.login_history | join('\n') }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Root Cron Jobs</summary>
+            {% if not details.user_logs_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.cron_jobs == "Skipped" or not details.cron_jobs or (details.cron_jobs is sequence and details.cron_jobs | length == 0) %}
+                <p>No root cron jobs found or data not available for this host.</p>
+            {% else %}
+                <pre>{{ details.cron_jobs | join('\n') }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Lynis Scan Results</summary>
+            {% if not details.lynis_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.lynis_status == "Tool not found" %}
+                <p>Lynis tool not found on the host. Scan not performed.</p>
+            {% elif details.lynis_status == "Scan not run" %}
+                <p>Lynis scan did not run. Please check playbook logic or tool availability.</p>
+            {% elif details.lynis_status == "Error during run" %}
+                <p>An error occurred during the Lynis scan. Output may be incomplete or unavailable.</p>
+                {% if details.lynis_output and details.lynis_output | length > 0 %}
+                    <pre>{{ details.lynis_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured.</p>
+                {% endif %}
+            {% elif details.lynis_status == "No output" %}
+                <p>Lynis scan ran but produced no output.</p>
+            {% elif details.lynis_status == "Collected" and details.lynis_output and details.lynis_output | length > 0 %}
+                <pre>{{ details.lynis_output | join('\n') }}</pre>
+            {% else %}
+                <p>Lynis scan data is unavailable or status is unknown: {{ details.lynis_status }}</p>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Rkhunter Scan Results</summary>
+            {% if not details.rkhunter_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.rkhunter_status == "Tool not found" %}
+                <p>Rkhunter tool not found on the host. Scan not performed.</p>
+            {% elif details.rkhunter_status == "Scan not run" %}
+                <p>Rkhunter scan did not run. Please check playbook logic or tool availability.</p>
+            {% elif details.rkhunter_status == "Error during run" %}
+                <p>An error occurred during the Rkhunter scan. Output may be incomplete or unavailable.</p>
+                {% if details.rkhunter_output and details.rkhunter_output | length > 0 %}
+                    <pre>{{ details.rkhunter_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured.</p>
+                {% endif %}
+            {% elif details.rkhunter_status == "No output" %}
+                <p>Rkhunter scan ran but produced no output.</p>
+            {% elif details.rkhunter_status == "Collected" and details.rkhunter_output and details.rkhunter_output | length > 0 %}
+                <pre>{{ details.rkhunter_output | join('\n') }}</pre>
+            {% else %}
+                <p>Rkhunter scan data is unavailable or status is unknown: {{ details.rkhunter_status }}</p>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>AIDE File Integrity Check</summary>
+            {% if not details.aide_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.aide_status == "Tool not found or install failed" %}
+                <p>AIDE tool not found on the host or installation failed. Scan not performed.</p>
+            {% elif details.aide_status == "Baseline initialized and fetched" %}
+                <p>AIDE baseline was initialized on the target and fetched to the controller. No check was performed in this run. Run the playbook again to perform a check against this new baseline.</p>
+            {% elif details.aide_status == "Baseline not found on controller (init failed or not attempted this run)" %}
+                <p>AIDE baseline for this host was not found on the controller, and initialization was not successfully completed in this run. Cannot perform check.</p>
+            {% elif details.aide_status == "AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" %}
+                <p>The AIDE check task did not run. This might be due to an issue copying the baseline to the target or an AIDE command problem.</p>
+            {% elif details.aide_status == "Error during AIDE check" %}
+                <p>An error occurred during the AIDE check. Output may be incomplete or unavailable.</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured, or AIDE data was not available.</p>
+                {% endif %}
+            {% elif details.aide_status == "No changes found" %}
+                <p>AIDE check ran successfully. No file changes detected against the baseline.</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    {# AIDE might still have some summary output even with no changes #}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% endif %}
+            {% elif details.aide_status == "Changes found" %}
+                <p>AIDE check ran successfully. File changes were detected against the baseline:</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% else %}
+                     <p>Changes detected, but output is not available. Check raw logs if necessary.</p>
+                {% endif %}
+            {% else %}
+                <p>AIDE status is unknown or data is unavailable: {{ details.aide_status }}</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% endif %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Filesystem Usage</summary>
+            {% if not details.system_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.filesystem == "Skipped" or not details.filesystem or (details.filesystem is sequence and details.filesystem | length == 0) %}
+                <p>No filesystem usage data available for this host.</p>
+            {% else %}
+                <pre>{{ details.filesystem | join('\n') }}</pre>
             {% endif %}
         </details>
     </div>
