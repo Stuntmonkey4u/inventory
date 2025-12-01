@@ -14,6 +14,9 @@
     collect_lynis_info: true
     collect_rkhunter_info: true
     collect_aide_info: true
+    collect_process_info: true
+    collect_privilege_info: true
+    collect_persistence_info: true
   tasks:
 
     - name: Ensure temporary report directory exists on controller
@@ -197,6 +200,30 @@
           ignore_errors: true # yaml[truthy]
       when: collect_system_info
 
+    - name: Gather Process and Network Analysis
+      tags: process_network
+      block:
+        - name: Get full process list
+          ansible.builtin.command: ps auxwww
+          register: process_list
+          changed_when: false
+          ignore_errors: true
+
+        - name: Install lsof
+          ansible.builtin.package:
+            name: lsof
+            state: present
+          register: lsof_install_result
+          ignore_errors: true
+
+        - name: Get open files and connections
+          ansible.builtin.command: lsof -n
+          register: open_files
+          when: lsof_install_result is not failed
+          changed_when: false
+          ignore_errors: true
+      when: collect_process_info
+
     - name: Perform Security Scans (Lynis, Rkhunter)
       tags: security_scans
       block:
@@ -251,6 +278,60 @@
             - collect_rkhunter_info
             - rkhunter_exists is defined and rkhunter_exists.rc == 0
       when: collect_lynis_info or collect_rkhunter_info
+
+    - name: Gather User and Privilege Auditing
+      tags: user_privilege
+      block:
+        - name: Get sudoers file content
+          ansible.builtin.slurp:
+            src: /etc/sudoers
+          register: sudoers_file
+          ignore_errors: true
+
+        - name: Find sudoers.d files
+          ansible.builtin.find:
+            paths: /etc/sudoers.d
+            recurse: yes
+          register: sudoers_d_files
+          ignore_errors: true
+
+        - name: Get content of sudoers.d files
+          ansible.builtin.slurp:
+            src: "{{ item.path }}"
+          register: sudoers_d_content
+          loop: "{{ sudoers_d_files.files | default([]) }}"
+          ignore_errors: true
+
+        - name: Get all users
+          ansible.builtin.getent:
+            database: passwd
+          register: all_users
+          ignore_errors: true
+
+        - name: Get all users cron jobs
+          ansible.builtin.command: "crontab -l -u {{ item.key }}"
+          register: user_cron_jobs
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          changed_when: false
+          ignore_errors: true
+
+        - name: Get all users SSH authorized keys
+          ansible.builtin.slurp:
+            src: "{{ item.value.6 }}/.ssh/authorized_keys"
+          register: ssh_keys
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          ignore_errors: true
+      when: collect_privilege_info
+
+    - name: Gather Persistence Mechanisms
+      tags: persistence
+      block:
+        - name: Get systemd timers
+          ansible.builtin.command: systemctl list-timers
+          register: systemd_timers
+          changed_when: false
+          ignore_errors: true
+      when: collect_persistence_info
 
     - name: Perform AIDE File Integrity Check
       tags: aide
@@ -411,7 +492,20 @@
                 (["Baseline initialized, no check performed on this run."] if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
                   ["AIDE data not available due to previous errors or status."] # Fallback message
                 )
-              )
+              ),
+
+              "process_info_collected": "{{ collect_process_info }}",
+              "process_list": (process_list.stdout_lines | default([]) if collect_process_info else "Skipped"),
+              "open_files": (open_files.stdout_lines | default([]) if collect_process_info else "Skipped"),
+
+              "privilege_info_collected": "{{ collect_privilege_info }}",
+              "sudoers_file": (sudoers_file.content | b64decode | default('') if collect_privilege_info else "Skipped"),
+              "sudoers_d_content": (sudoers_d_content.results | default([]) if collect_privilege_info else "Skipped"),
+              "user_cron_jobs": (user_cron_jobs.results | default([]) if collect_privilege_info else "Skipped"),
+              "ssh_keys": (ssh_keys.results | default([]) if collect_privilege_info else "Skipped"),
+
+              "persistence_info_collected": "{{ collect_persistence_info }}",
+              "systemd_timers": (systemd_timers.stdout_lines | default([]) if collect_persistence_info else "Skipped")
             }
           }
           }}

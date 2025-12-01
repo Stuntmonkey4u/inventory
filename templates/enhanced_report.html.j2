@@ -241,6 +241,15 @@
     <div class="report-section">
         <h2 class="host-title">Host: {{ host | e }}</h2>
         <div class="host-details">
+            <div class="quick-nav">
+                <a href="#services-{{ host }}">Services</a> |
+                <a href="#packages-{{ host }}">Packages</a> |
+                <a href="#docker-{{ host }}">Docker</a> |
+                <a href="#network-{{ host }}">Network</a> |
+                <a href="#users-{{ host }}">Users</a> |
+                <a href="#security-{{ host }}">Security</a> |
+                <a href="#persistence-{{ host }}">Persistence</a>
+            </div>
             <p><strong>Hostname:</strong> {{ details.hostname | e }}</p>
             <p><strong>IP Address:</strong> {{ details.ip | e }}</p>
             <p><strong>Operating System:</strong> {{ details.os | e }}</p>
@@ -327,20 +336,13 @@
                 <p>No package data available for this host.</p>
             {% else %}
                 <input type="text" class="table-filter" placeholder="Filter packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable-header">Package Name</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in details.packages %}
-                        <tr>
-                            <td>{{ item | e }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+                <div class="multi-column">
+                    <ul>
+                        {% for item in details.packages %}
+                            <li>{{ item | e }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
         </details>
 
