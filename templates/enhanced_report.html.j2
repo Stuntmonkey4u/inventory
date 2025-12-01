@@ -250,10 +250,10 @@
                 <a href="#security-{{ host }}">Security</a> |
                 <a href="#persistence-{{ host }}">Persistence</a>
             </div>
-            <p><strong>Hostname:</strong> {{ details.hostname }}</p>
-            <p><strong>IP Address:</strong> {{ details.ip }}</p>
-            <p><strong>Operating System:</strong> {{ details.os }}</p>
-            <p><strong>Uptime:</strong> {{ details.uptime }}</p>
+            <p><strong>Hostname:</strong> {{ details.hostname | e }}</p>
+            <p><strong>IP Address:</strong> {{ details.ip | e }}</p>
+            <p><strong>Operating System:</strong> {{ details.os | e }}</p>
+            <p><strong>Uptime:</strong> {{ details.uptime | e }}</p>
             <p><strong>Boot Time:</strong>
                 {% if not details.system_info_collected %}
                     Skipped by user.
@@ -300,83 +300,6 @@
                         </table>
                     </details>
                 {% endif %}
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Process List</summary>
-            {% if not details.process_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.process_list == "Skipped" or not details.process_list or (details.process_list is sequence and details.process_list | length == 0) %}
-                <p>No process list data available for this host.</p>
-            {% else %}
-                <pre>{{ details.process_list | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Open Files and Connections (lsof)</summary>
-            {% if not details.process_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.open_files == "Skipped" or not details.open_files or (details.open_files is sequence and details.open_files | length == 0) %}
-                <p>No open files data available for this host.</p>
-            {% else %}
-                <pre>{{ details.open_files | join('\n') | e }}</pre>
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>Sudoers Configuration</summary>
-            {% if not details.privilege_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% else %}
-                <h4>/etc/sudoers</h4>
-                <pre>{{ details.sudoers_file | e }}</pre>
-                <h4>/etc/sudoers.d/</h4>
-                {% for item in details.sudoers_d_content %}
-                    <h5>{{ item.item.path }}</h5>
-                    <pre>{{ item.content | b64decode | e }}</pre>
-                {% endfor %}
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>User Cron Jobs</summary>
-            {% if not details.privilege_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% else %}
-                {% for item in details.user_cron_jobs %}
-                    {% if item.stdout %}
-                        <h4>{{ item.item.key }}</h4>
-                        <pre>{{ item.stdout | e }}</pre>
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-        </details>
-
-        <details>
-            <summary>SSH Authorized Keys</summary>
-            {% if not details.privilege_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% else %}
-                {% for item in details.ssh_keys %}
-                    {% if item.content %}
-                        <h4>{{ item.item.key }}</h4>
-                        <pre>{{ item.content | b64decode | e }}</pre>
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-        </details>
-
-        <h3 id="persistence-{{ host }}">Persistence</h3>
-        <details>
-            <summary>Systemd Timers</summary>
-            {% if not details.persistence_info_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.systemd_timers == "Skipped" or not details.systemd_timers or (details.systemd_timers is sequence and details.systemd_timers | length == 0) %}
-                <p>No systemd timers data available for this host.</p>
-            {% else %}
-                <pre>{{ details.systemd_timers | join('\n') | e }}</pre>
             {% endif %}
         </details>
 
