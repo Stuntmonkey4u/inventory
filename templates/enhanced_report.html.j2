@@ -487,6 +487,46 @@
         </details>
 
         <details>
+            <summary>AIDE File Integrity Check</summary>
+            {% if not details.aide_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.aide_status == "Tool not found or install failed" %}
+                <p>AIDE tool not found on the host or installation failed. Scan not performed.</p>
+            {% elif details.aide_status == "Baseline initialized and fetched" %}
+                <p>AIDE baseline was initialized on the target and fetched to the controller. No check was performed in this run. Run the playbook again to perform a check against this new baseline.</p>
+            {% elif details.aide_status == "Baseline not found on controller (init failed or not attempted this run)" %}
+                <p>AIDE baseline for this host was not found on the controller, and initialization was not successfully completed in this run. Cannot perform check.</p>
+            {% elif details.aide_status == "AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" %}
+                <p>The AIDE check task did not run. This might be due to an issue copying the baseline to the target or an AIDE command problem.</p>
+            {% elif details.aide_status == "Error during AIDE check" %}
+                <p>An error occurred during the AIDE check. Output may be incomplete or unavailable.</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% else %}
+                    <p>No specific error output captured, or AIDE data was not available.</p>
+                {% endif %}
+            {% elif details.aide_status == "No changes found" %}
+                <p>AIDE check ran successfully. No file changes detected against the baseline.</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    {# AIDE might still have some summary output even with no changes #}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% endif %}
+            {% elif details.aide_status == "Changes found" %}
+                <p>AIDE check ran successfully. File changes were detected against the baseline:</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% else %}
+                     <p>Changes detected, but output is not available. Check raw logs if necessary.</p>
+                {% endif %}
+            {% else %}
+                <p>AIDE status is unknown or data is unavailable: {{ details.aide_status }}</p>
+                {% if details.aide_output and details.aide_output | length > 0 and "AIDE data not available" not in details.aide_output[0] %}
+                    <pre>{{ details.aide_output | join('\n') }}</pre>
+                {% endif %}
+            {% endif %}
+        </details>
+
+        <details>
             <summary>Filesystem Usage</summary>
             {% if not details.system_info_collected %}
                 <p>Data collection for this section was skipped by the user.</p>
