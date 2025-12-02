@@ -241,10 +241,19 @@
     <div class="report-section">
         <h2 class="host-title">Host: {{ host }}</h2>
         <div class="host-details">
-            <p><strong>Hostname:</strong> {{ details.hostname }}</p>
-            <p><strong>IP Address:</strong> {{ details.ip }}</p>
-            <p><strong>Operating System:</strong> {{ details.os }}</p>
-            <p><strong>Uptime:</strong> {{ details.uptime }}</p>
+            <div class="quick-nav">
+                <a href="#services-{{ host }}">Services</a> |
+                <a href="#packages-{{ host }}">Packages</a> |
+                <a href="#docker-{{ host }}">Docker</a> |
+                <a href="#network-{{ host }}">Network</a> |
+                <a href="#users-{{ host }}">Users</a> |
+                <a href="#security-{{ host }}">Security</a> |
+                <a href="#persistence-{{ host }}">Persistence</a>
+            </div>
+            <p><strong>Hostname:</strong> {{ details.hostname | e }}</p>
+            <p><strong>IP Address:</strong> {{ details.ip | e }}</p>
+            <p><strong>Operating System:</strong> {{ details.os | e }}</p>
+            <p><strong>Uptime:</strong> {{ details.uptime | e }}</p>
             <p><strong>Boot Time:</strong>
                 {% if not details.system_info_collected %}
                     Skipped by user.
@@ -327,20 +336,13 @@
                 <p>No package data available for this host.</p>
             {% else %}
                 <input type="text" class="table-filter" placeholder="Filter packages..." style="margin-bottom: 10px; padding: 8px; border-radius: 4px; border: 1px solid var(--current-border-color); background-color: var(--current-section-bg); color: var(--current-text-color); width: 100%; box-sizing: border-box;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable-header">Package Name</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in details.packages %}
-                        <tr>
-                            <td>{{ item }}</td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+                <div class="multi-column">
+                    <ul>
+                        {% for item in details.packages %}
+                            <li>{{ item | e }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
         </details>
 
@@ -534,6 +536,90 @@
                 <p>No filesystem usage data available for this host.</p>
             {% else %}
                 <pre>{{ details.filesystem | join('\n') }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Process List</summary>
+            {% if not details.process_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.process_list == "Skipped" or not details.process_list or (details.process_list is sequence and details.process_list | length == 0) %}
+                <p>No process list data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.process_list | join('\n')) | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Open Files</summary>
+            {% if not details.process_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.open_files == "Skipped" or not details.open_files or (details.open_files is sequence and details.open_files | length == 0) %}
+                <p>No open files data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.open_files | join('\n')) | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Sudoers File</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.sudoers_file == "Skipped" or not details.sudoers_file %}
+                <p>No sudoers file data available for this host.</p>
+            {% else %}
+                <pre>{{ details.sudoers_file | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Sudoers.d Files</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.sudoers_d_content == "Skipped" or not details.sudoers_d_content or (details.sudoers_d_content is sequence and details.sudoers_d_content | length == 0) %}
+                <p>No sudoers.d files data available for this host.</p>
+            {% else %}
+                {% for item in details.sudoers_d_content %}
+                    <pre>{{ (item.content | b64decode) | e }}</pre>
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>User Cron Jobs</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.user_cron_jobs == "Skipped" or not details.user_cron_jobs or (details.user_cron_jobs is sequence and details.user_cron_jobs | length == 0) %}
+                <p>No user cron jobs data available for this host.</p>
+            {% else %}
+                {% for item in details.user_cron_jobs %}
+                    <h4>{{ item.item.key | e }}</h4>
+                    <pre>{{ item.stdout | e }}</pre>
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>SSH Keys</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.ssh_keys == "Skipped" or not details.ssh_keys or (details.ssh_keys is sequence and details.ssh_keys | length == 0) %}
+                <p>No SSH keys data available for this host.</p>
+            {% else %}
+                {% for key in details.ssh_keys %}
+                    <pre>{{ key | e }}</pre>
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Systemd Timers</summary>
+            {% if not details.persistence_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.systemd_timers == "Skipped" or not details.systemd_timers or (details.systemd_timers is sequence and details.systemd_timers | length == 0) %}
+                <p>No systemd timers data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.systemd_timers | join('\n')) | e }}</pre>
             {% endif %}
         </details>
     </div>
