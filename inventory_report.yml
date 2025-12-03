@@ -11,9 +11,11 @@
     collect_network_info: true
     collect_user_logs_info: true
     collect_system_info: true # For boot time and fs_usage
-    collect_lynis_info: true
-    collect_rkhunter_info: true
-    collect_aide_info: true
+    collect_lynis_info: false
+    collect_aide_info: false
+    collect_process_info: true
+    collect_privilege_info: true
+    collect_persistence_info: true
   tasks:
 
     - name: Ensure temporary report directory exists on controller
@@ -23,7 +25,7 @@
         mode: '0755'
       delegate_to: localhost
       run_once: true
-      become: true # Might be needed if default /tmp/reports needs root
+      become: false # Should not need root for /tmp
 
     - name: Ensure AIDE baseline directory exists on controller
       ansible.builtin.file:
@@ -59,43 +61,34 @@
 
         - name: Get upgradable packages (apt systems)
           ansible.builtin.shell:
-            cmd: "set -o pipefail && apt list --upgradable | grep -v 'Listing...'" # risky-shell-pipe
+            cmd: "set -o pipefail && apt list --upgradable 2>/dev/null | grep -v 'Listing...'"
             executable: /bin/bash
           register: upgradable_packages
-          failed_when: >
-            upgradable_packages.rc != 0 and
-            'Listing...' not in upgradable_packages.stderr and
-            'WARNING: apt does not have a stable CLI interface' not in upgradable_packages.stderr
           changed_when: false
-
-        - name: Debug upgradable packages output
-          ansible.builtin.debug:
-            msg: |
-              Upgradable packages rc: {{ upgradable_packages.rc }}
-              Upgradable packages stderr: {{ upgradable_packages.stderr }}
-              Upgradable packages stdout: {{ upgradable_packages.stdout }}
-          when: upgradable_packages.stderr is defined and upgradable_packages.stderr != ""
+          when: ansible_pkg_mgr == 'apt'
+          ignore_errors: true
       when: collect_packages_info
 
     - name: Gather Docker Information
       tags: docker
       block:
-        - name: Check if Docker is installed
-          ansible.builtin.shell: |
-            if command -v docker >/dev/null 2>&1; then
-              docker --version
-              exit 0
-            else
-              exit 127
-            fi
+        - name: Check for Docker command
+          ansible.builtin.command: command -v docker
+          register: docker_cmd_check
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+
+        - name: Get Docker version
+          ansible.builtin.command: docker --version
           register: docker_check
+          when: docker_cmd_check.rc == 0
           changed_when: false
           ignore_errors: true # yaml[truthy]
 
         - name: Get running Docker containers
-          ansible.builtin.shell: "docker ps --format '{{ '{{' }}.Names}}: {{ '{{' }}.Image}}'" # noqa jinja[invalid] <- Linter struggles with Go template
+          ansible.builtin.command: "docker ps --format '{{ '{{' }}.Names}}: {{ '{{' }}.Image}}'" # noqa jinja[invalid]
           register: docker_containers
-          when: docker_check.rc == 0
+          when: docker_cmd_check.rc == 0
           changed_when: false
           ignore_errors: true # yaml[truthy]
       when: collect_docker_info
@@ -103,101 +96,147 @@
     - name: Gather Network Information
       tags: network
       block:
-        - name: Get listening ports
-          ansible.builtin.shell: |
-            if command -v ss >/dev/null; then
-              ss -tulnp
-            elif command -v netstat >/dev/null; then
-              netstat -tulnp
-            else
-              echo "No tool found to list ports"
-            fi
-          register: listening_ports
+        - name: Check for ss command
+          ansible.builtin.command: command -v ss
+          register: ss_cmd_check
           changed_when: false
           ignore_errors: true # yaml[truthy]
 
+        - name: Get listening ports with ss
+          ansible.builtin.command: ss -tulnp
+          register: listening_ports_ss
+          when: ss_cmd_check.rc == 0
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+
+        - name: Check for netstat command
+          ansible.builtin.command: command -v netstat
+          register: netstat_cmd_check
+          when: ss_cmd_check.rc != 0 # Only check if ss is not available
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+
+        - name: Get listening ports with netstat
+          ansible.builtin.command: netstat -tulnp
+          register: listening_ports_netstat
+          when:
+            - ss_cmd_check.rc != 0
+            - netstat_cmd_check.rc == 0
+          changed_when: false
+          ignore_errors: true # yaml[truthy]
+
+        - name: Set listening_ports fact
+          ansible.builtin.set_fact:
+            listening_ports: "{{ listening_ports_ss if ss_cmd_check.rc == 0 else listening_ports_netstat }}"
+          changed_when: false
+
         - name: Gather Firewall Information
           tags: firewall
-          block: # This inner block for a single task is fine
-            - name: Get firewall rules (Check for iptables or ufw)
-              ansible.builtin.shell: |
-                if command -v iptables > /dev/null; then
-                  iptables -L -n -v
-                elif command -v ufw > /dev/null; then
-                  ufw status
-                else
-                  echo "No iptables or ufw found"
-                fi
-              register: firewall_rules
+          block:
+            - name: Check for iptables command
+              ansible.builtin.command: command -v iptables
+              register: iptables_cmd_check
               changed_when: false
               ignore_errors: true # yaml[truthy]
-      when: collect_network_info # This 'when' applies to the entire outer block
+
+            - name: Get iptables rules
+              ansible.builtin.command: iptables -L -n -v
+              register: firewall_rules_iptables
+              when: iptables_cmd_check.rc == 0
+              changed_when: false
+              ignore_errors: true # yaml[truthy]
+
+            - name: Check for ufw command
+              ansible.builtin.command: command -v ufw
+              register: ufw_cmd_check
+              when: iptables_cmd_check.rc != 0 # Only check if iptables is not available
+              changed_when: false
+              ignore_errors: true # yaml[truthy]
+
+            - name: Get ufw status
+              ansible.builtin.command: ufw status
+              register: firewall_rules_ufw
+              when:
+                - iptables_cmd_check.rc != 0
+                - ufw_cmd_check.rc == 0
+              changed_when: false
+              ignore_errors: true # yaml[truthy]
+
+            - name: Set firewall_rules fact
+              ansible.builtin.set_fact:
+                firewall_rules: "{{ firewall_rules_iptables if iptables_cmd_check.rc == 0 else firewall_rules_ufw }}"
+              changed_when: false
+      when: collect_network_info
 
     - name: Gather User and Log Information
       tags: user_logs
       block:
         - name: Get login history
-          ansible.builtin.shell: |
-            if command -v lastlog > /dev/null; then
-              lastlog
-            else
-              echo "lastlog command not found"
-            fi
+          ansible.builtin.command: lastlog
           register: lastlog
           changed_when: false
           ignore_errors: true # yaml[truthy]
 
         - name: Get root cron jobs
-          ansible.builtin.shell: "crontab -l || echo 'no crontab for root'" # Needs shell due to ||
+          ansible.builtin.command: crontab -l
           register: root_cron
           changed_when: false
-          ignore_errors: true # yaml[truthy]
+          ignore_errors: true
       when: collect_user_logs_info
 
     - name: Gather System Information
       tags: system
       block:
         - name: Get boot time
-          ansible.builtin.command: uptime -s # Changed from shell
+          ansible.builtin.command: uptime -s
           register: boot_time
           changed_when: false
           ignore_errors: true # yaml[truthy]
 
         - name: Get filesystem usage
-          ansible.builtin.command: df -h # Changed from shell
+          ansible.builtin.command: df -h
           register: fs_usage
           changed_when: false
           ignore_errors: true # yaml[truthy]
       when: collect_system_info
 
-    - name: Perform Security Scans (Lynis, Rkhunter)
+    - name: Gather Process and Network Analysis
+      tags: process_network
+      block:
+        - name: Get full process list
+          ansible.builtin.command: ps auxwww
+          register: process_list
+          changed_when: false
+          ignore_errors: true
+
+        - name: Install lsof
+          ansible.builtin.package:
+            name: lsof
+            state: present
+          register: lsof_install_result
+          ignore_errors: true
+          become: true
+
+        - name: Get open files and connections
+          ansible.builtin.command: lsof -n
+          register: open_files
+          when: lsof_install_result is not failed
+          changed_when: false
+          ignore_errors: true
+      when: collect_process_info
+
+    - name: Perform Security Scans (Lynis)
       tags: security_scans
       block:
-        - name: Ensure security scan tools are installed (lynis, rkhunter)
+        - name: Ensure security scan tools are installed (lynis)
           ansible.builtin.package:
             name:
               - lynis
-              - rkhunter
             state: present
           register: security_tools_install_result # We still register to potentially use details about install success/failure in status, though direct check is better
           ignore_errors: true # yaml[truthy]
-          when: collect_lynis_info or collect_rkhunter_info
-
-        - name: Check if rkhunter is available
-          ansible.builtin.command: command -v rkhunter
-          register: rkhunter_exists
-          changed_when: false
-          ignore_errors: true # yaml[truthy]
-          when: collect_rkhunter_info
-
-        - name: Update rkhunter database (might require internet)
-          ansible.builtin.command: rkhunter --update
-          register: rkhunter_update_result
-          changed_when: "'updated' in rkhunter_update_result.stdout | lower"
-          ignore_errors: true # yaml[truthy]
-          when:
-            - collect_rkhunter_info
-            - rkhunter_exists is defined and rkhunter_exists.rc == 0
+          when: collect_lynis_info
+          become: true
 
         - name: Check if lynis is available
           ansible.builtin.command: command -v lynis
@@ -214,26 +253,106 @@
           when:
             - collect_lynis_info
             - lynis_exists is defined and lynis_exists.rc == 0
+      when: collect_lynis_info
 
-        - name: Run Rkhunter Scan
-          ansible.builtin.command: rkhunter --check --sk --nocolors
-          register: rkhunter_scan_result
+    - name: Gather User and Privilege Auditing
+      tags: user_privilege
+      block:
+        - name: Get sudoers file content
+          ansible.builtin.slurp:
+            src: /etc/sudoers
+          register: sudoers_file
+          ignore_errors: true
+          become: true
+
+        - name: Find sudoers.d files
+          ansible.builtin.find:
+            paths: /etc/sudoers.d
+            recurse: yes
+          register: sudoers_d_files
+          ignore_errors: true
+
+        - name: Get content of sudoers.d files
+          ansible.builtin.slurp:
+            src: "{{ item.path }}"
+          register: sudoers_d_content
+          loop: "{{ sudoers_d_files.files | default([]) }}"
+          ignore_errors: true
+          become: true
+
+        - name: Get all users
+          ansible.builtin.getent:
+            database: passwd
+          register: all_users
+          ignore_errors: true
+
+        - name: Get all users cron jobs
+          ansible.builtin.command: "crontab -l -u {{ item.key }}"
+          register: user_cron_jobs
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
           changed_when: false
-          ignore_errors: true # yaml[truthy]
-          when:
-            - collect_rkhunter_info
-            - rkhunter_exists is defined and rkhunter_exists.rc == 0
-      when: collect_lynis_info or collect_rkhunter_info
+          ignore_errors: true
+          become: true
+
+        - name: Check for existence of authorized_keys for all users
+          ansible.builtin.stat:
+            path: "{{ item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys_stat
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.value[5] is defined and item.value[5].startswith('/')
+          become: true
+          ignore_errors: true
+
+        - name: Get all users SSH authorized keys
+          ansible.builtin.slurp:
+            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys
+          loop: "{{ ssh_keys_stat.results }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+          when: item.stat is defined and item.stat.exists and item.stat.isreg
+          ignore_errors: true
+          become: true
+      when: collect_privilege_info
+
+    - name: Initialize prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: []
+      when: collect_privilege_info
+
+    - name: Build prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: "{{ prepared_ssh_keys + [{'user': item.item.item.key, 'key': item.content | b64decode}] }}"
+      loop: "{{ ssh_keys.results | default([]) | selectattr('skipped', 'undefined') | selectattr('content', 'defined') }}"
+      loop_control:
+        label: "{{ item.item.item.key }}"
+      when:
+        - collect_privilege_info
+        - ssh_keys is defined
+        - ssh_keys.results is defined
+
+    - name: Gather Persistence Mechanisms
+      tags: persistence
+      block:
+        - name: Get systemd timers
+          ansible.builtin.command: systemctl list-timers
+          register: systemd_timers
+          changed_when: false
+          ignore_errors: true
+      when: collect_persistence_info
 
     - name: Perform AIDE File Integrity Check
       tags: aide
       block:
         - name: Install AIDE package
           ansible.builtin.package:
-            name: aide # Common name, might need 'aide-common' or platform specific adjustments
+            name: aide
             state: present
           register: aide_install_result
           ignore_errors: true # yaml[truthy]
+          become: true
 
         - name: Check if AIDE command is available
           ansible.builtin.command: command -v aide
@@ -241,87 +360,83 @@
           changed_when: false
           ignore_errors: true # yaml[truthy]
 
-        - name: Set AIDE baseline path facts
+        - name: Set AIDE baseline path fact
           ansible.builtin.set_fact:
             aide_controller_baseline_path: "{{ playbook_dir }}/aide_baselines/{{ inventory_hostname }}.db.gz"
-            aide_target_temp_new_db_path: "/var/lib/aide/aide.db.new.gz" # Default AIDE output
-            aide_target_active_db_path: "/var/lib/aide/aide.db.gz" # Standard operational path
+            aide_target_db_path: "/var/lib/aide/aide.db.gz"
           when: aide_exists.rc == 0
 
-        - name: Check if AIDE baseline exists on controller for this host
+        - name: Check if AIDE baseline exists on controller
           ansible.builtin.stat:
             path: "{{ aide_controller_baseline_path }}"
           delegate_to: localhost
           register: aide_baseline_on_controller_stat
           when: aide_exists.rc == 0
 
-        - name: Initialize AIDE and fetch baseline (if not on controller)
+        - name: Initialize AIDE and fetch baseline (if it does not exist on controller)
+          when:
+            - aide_exists.rc == 0
+            - not aide_baseline_on_controller_stat.stat.exists
           block:
-            - name: Ensure AIDE database directory exists on target
+            - name: Ensure AIDE directory exists
               ansible.builtin.file:
-                path: "/var/lib/aide"
+                path: /var/lib/aide
                 state: directory
-                mode: '0755' # Or more restrictive as AIDE recommends
-
+                mode: '0755'
+              become: true
+            - name: Copy AIDE configuration file
+              ansible.builtin.copy:
+                src: aide.conf
+                dest: /etc/aide/aide.conf
+                mode: '0644'
+              become: true
             - name: Initialize AIDE database on target
-              ansible.builtin.command: aide --init # or aideinit, depending on distro version of aide
+              ansible.builtin.command: aide --config /etc/aide/aide.conf --init
               register: aide_init_result
-              changed_when: false # Success (rc=0) implies the new DB is created at aide_target_temp_new_db_path
-              ignore_errors: true # yaml[truthy] (to capture status later)
-
-            - name: Rename newly initialized AIDE database
-              ansible.builtin.command: "mv {{ aide_target_temp_new_db_path }} {{ aide_target_active_db_path }}"
-              when: aide_init_result is defined and aide_init_result.rc == 0
-              register: aide_rename_result
-              changed_when: aide_rename_result.rc == 0
+              changed_when: "'AIDE, version' in aide_init_result.stdout"
               ignore_errors: true # yaml[truthy]
+              become: true
+
+            - name: Move new AIDE database to active path
+              ansible.builtin.command: mv /var/lib/aide/aide.db.new.gz {{ aide_target_db_path }}
+              when: aide_init_result.rc == 0
+              changed_when: true
+              become: true
 
             - name: Fetch AIDE baseline from target to controller
               ansible.builtin.fetch:
-                src: "{{ aide_target_active_db_path }}" # e.g. /var/lib/aide/aide.db.gz
-                dest: "{{ aide_controller_baseline_path }}" # e.g. ./aide_baselines/hostname.db.gz
-                flat: yes # Ensures dest is treated as a file path
-                fail_on_missing: yes
-              when: aide_rename_result is defined and aide_rename_result.rc == 0
-              register: aide_fetch_result
+                src: "{{ aide_target_db_path }}"
+                dest: "{{ aide_controller_baseline_path }}"
+                flat: true
+                fail_on_missing: true
+              when: aide_init_result.rc == 0
+              become: true
 
             - name: Set fact that baseline was initialized
               ansible.builtin.set_fact:
                 aide_baseline_initialized_this_run: true
-              when: aide_fetch_result is defined and not aide_fetch_result.failed
-
-          when:
-            - aide_exists.rc == 0
-            - aide_baseline_on_controller_stat.stat.exists is defined and not aide_baseline_on_controller_stat.stat.exists
-            - aide_install_result is defined and not aide_install_result.failed # Ensure install didn't grossly fail
 
         - name: Run AIDE Check (if baseline exists on controller)
+          when:
+            - aide_exists.rc == 0
+            - aide_baseline_on_controller_stat.stat.exists
           block:
-            - name: Ensure AIDE database directory exists on target (again, for this path)
+            - name: Ensure AIDE directory exists
               ansible.builtin.file:
-                path: "/var/lib/aide"
+                path: /var/lib/aide
                 state: directory
                 mode: '0755'
-
             - name: Copy AIDE baseline from controller to target
               ansible.builtin.copy:
                 src: "{{ aide_controller_baseline_path }}"
-                dest: "{{ aide_target_active_db_path }}"
-                mode: '0600' # AIDE dbs should be protected
-              register: aide_copy_to_target_result
+                dest: "{{ aide_target_db_path }}"
+                mode: '0600'
 
-            - name: Run AIDE check against the copied baseline
+            - name: Run AIDE check against the baseline
               ansible.builtin.command: aide --check
               register: aide_check_result
-              ignore_errors: true # AIDE exits >0 if changes are found or errors occur.
-              changed_when: false # This task only reads data.
-              when: aide_copy_to_target_result is defined and not aide_copy_to_target_result.failed
-
-          when:
-            - aide_exists.rc == 0
-            - aide_baseline_on_controller_stat.stat.exists is defined and aide_baseline_on_controller_stat.stat.exists
-            - aide_install_result is defined and not aide_install_result.failed
-
+              ignore_errors: true # AIDE exits >0 if changes are found.
+              changed_when: false
       when: collect_aide_info
 
     - name: Set host-specific report data with sanitization
@@ -339,7 +454,7 @@
               "all_services": (services.stdout_lines | default([]) if collect_services_info else "Skipped"),
               "packages_collected": "{{ collect_packages_info }}",
               "packages": (ansible_facts.packages.keys() | list | default([]) if collect_packages_info else "Skipped"),
-              "upgradable_packages": (upgradable_packages.stdout_lines | default([]) if collect_packages_info else "Skipped"),
+              "upgradable_packages": (upgradable_packages.stdout_lines | default([]) if collect_packages_info and ansible_pkg_mgr == 'apt' else ("N/A for this OS" if collect_packages_info else "Skipped")),
               "docker_collected": "{{ collect_docker_info }}",
               "docker": (docker_containers.stdout_lines | default([]) if collect_docker_info else "Skipped"),
               "network_collected": "{{ collect_network_info }}",
@@ -356,7 +471,7 @@
               "lynis_status": (
                 "Skipped" if not collect_lynis_info else
                 ("Tool not found" if (lynis_exists is not defined or lynis_exists.rc != 0) else
-                  ("Scan not run" if lynis_scan_result is not defined else # Should not happen if lynis_exists.rc == 0
+                  ("Scan not run" if lynis_scan_result is not defined else
                    ("Error during run" if lynis_scan_result.failed or (lynis_scan_result.rc is defined and lynis_scan_result.rc != 0) else
                     ("Collected" if lynis_scan_result.stdout_lines | length > 0 else "No output")
                    )
@@ -365,19 +480,6 @@
               ),
               "lynis_output": (lynis_scan_result.stdout_lines | default([]) if collect_lynis_info and lynis_exists is defined and lynis_exists.rc == 0 and lynis_scan_result is defined and not lynis_scan_result.failed and lynis_scan_result.rc is defined and lynis_scan_result.rc == 0 else []),
 
-              "rkhunter_collected": "{{ collect_rkhunter_info }}",
-              "rkhunter_status": (
-                "Skipped" if not collect_rkhunter_info else
-                ("Tool not found" if (rkhunter_exists is not defined or rkhunter_exists.rc != 0) else
-                  ("Scan not run" if rkhunter_scan_result is not defined else # Should not happen if rkhunter_exists.rc == 0
-                   ("Error during run" if rkhunter_scan_result.failed or (rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc != 0) else
-                    ("Collected" if rkhunter_scan_result.stdout_lines | length > 0 else "No output")
-                   )
-                  )
-                )
-              ),
-              "rkhunter_output": (rkhunter_scan_result.stdout_lines | default([]) if collect_rkhunter_info and rkhunter_exists is defined and rkhunter_exists.rc == 0 and rkhunter_scan_result is defined and not rkhunter_scan_result.failed and rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc == 0 else []),
-
               "aide_collected": "{{ collect_aide_info }}",
               "aide_status": (
                 "Skipped" if not collect_aide_info else
@@ -385,20 +487,28 @@
                   ("Baseline initialized and fetched" if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
                     ("Baseline not found on controller (init failed or not attempted this run)" if not (aide_baseline_on_controller_stat is defined and aide_baseline_on_controller_stat.stat.exists is defined and aide_baseline_on_controller_stat.stat.exists) else
                       ("AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" if aide_check_result is not defined else
-                        ("Error during AIDE check" if (aide_check_result.failed or aide_check_result.rc is not defined) else # .failed is true if module has critical error
-                          ("No changes found" if aide_check_result.rc == 0 else "Changes found") # Any positive RC means changes
+                        ("Error during AIDE check" if (aide_check_result.failed or aide_check_result.rc is not defined) else
+                          ("No changes found" if aide_check_result.rc == 0 else "Changes found")
                         )
                       )
                     )
                   )
                 )
               ),
-              "aide_output": (
-                aide_check_result.stdout_lines | default([]) if collect_aide_info and aide_check_result is defined and aide_check_result.rc is defined else
-                (["Baseline initialized, no check performed on this run."] if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
-                  ["AIDE data not available due to previous errors or status."] # Fallback message
-                )
-              )
+              "aide_output": (aide_check_result.stdout_lines | default([]) if collect_aide_info and aide_check_result is defined else "Skipped"),
+
+              "process_info_collected": "{{ collect_process_info }}",
+              "process_list": (process_list.stdout_lines | default([]) if collect_process_info else "Skipped"),
+              "open_files": (open_files.stdout_lines | default([]) if collect_process_info else "Skipped"),
+
+              "privilege_info_collected": "{{ collect_privilege_info }}",
+              "sudoers_file": (sudoers_file.content | b64decode | default('') if collect_privilege_info else "Skipped"),
+              "sudoers_d_content": (sudoers_d_content.results | default([]) if collect_privilege_info else "Skipped"),
+              "user_cron_jobs": (user_cron_jobs.results | default([]) if collect_privilege_info else "Skipped"),
+              "ssh_keys": (prepared_ssh_keys | default([]) if collect_privilege_info else "Skipped"),
+
+              "persistence_info_collected": "{{ collect_persistence_info }}",
+              "systemd_timers": (systemd_timers.stdout_lines | default([]) if collect_persistence_info else "Skipped")
             }
           }
           }}
@@ -408,9 +518,9 @@
       ansible.builtin.copy:
         content: "{{ host_report_entry | to_nice_json }}"
         dest: "{{ report_dir | default('/tmp/reports') }}/{{ inventory_hostname }}_{{ ansible_date_time.iso8601_basic_short }}.report.json"
-        mode: '0600' # risky-file-permissions
+        mode: '0600'
       delegate_to: localhost
-      become: true # yaml[truthy]
+      become: false # No need to become root to write to a user-owned directory
 
 # ----------------------------------------
 

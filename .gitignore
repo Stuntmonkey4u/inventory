@@ -1,0 +1,9 @@
+# Ansible temporary files
+*.retry
+
+# Generated reports
+reports/
+
+# Local inventory files
+inventory.ini
+*.inv
