@@ -343,6 +343,94 @@
           ignore_errors: true
       when: collect_persistence_info
 
+    - name: Gather User and Privilege Auditing
+      tags: user_privilege
+      block:
+        - name: Get sudoers file content
+          ansible.builtin.slurp:
+            src: /etc/sudoers
+          register: sudoers_file
+          ignore_errors: true
+          become: true
+
+        - name: Find sudoers.d files
+          ansible.builtin.find:
+            paths: /etc/sudoers.d
+            recurse: yes
+          register: sudoers_d_files
+          ignore_errors: true
+
+        - name: Get content of sudoers.d files
+          ansible.builtin.slurp:
+            src: "{{ item.path }}"
+          register: sudoers_d_content
+          loop: "{{ sudoers_d_files.files | default([]) }}"
+          ignore_errors: true
+          become: true
+
+        - name: Get all users
+          ansible.builtin.getent:
+            database: passwd
+          register: all_users
+          ignore_errors: true
+
+        - name: Get all users cron jobs
+          ansible.builtin.command: "crontab -l -u {{ item.key }}"
+          register: user_cron_jobs
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          changed_when: false
+          ignore_errors: true
+          become: true
+
+        - name: Check for existence of authorized_keys for all users
+          ansible.builtin.stat:
+            path: "{{ item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys_stat
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.value[5] is defined and item.value[5].startswith('/')
+          become: true
+          ignore_errors: true
+
+        - name: Get all users SSH authorized keys
+          ansible.builtin.slurp:
+            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys
+          loop: "{{ ssh_keys_stat.results }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+          when: item.stat is defined and item.stat.exists and item.stat.isreg
+          ignore_errors: true
+          become: true
+      when: collect_privilege_info
+
+    - name: Initialize prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: []
+      when: collect_privilege_info
+
+    - name: Build prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: "{{ prepared_ssh_keys + [{'user': item.item.item.key, 'key': item.content | b64decode}] }}"
+      loop: "{{ ssh_keys.results | default([]) | selectattr('skipped', 'undefined') | selectattr('content', 'defined') }}"
+      loop_control:
+        label: "{{ item.item.item.key }}"
+      when:
+        - collect_privilege_info
+        - ssh_keys is defined
+        - ssh_keys.results is defined
+
+    - name: Gather Persistence Mechanisms
+      tags: persistence
+      block:
+        - name: Get systemd timers
+          ansible.builtin.command: systemctl list-timers
+          register: systemd_timers
+          changed_when: false
+          ignore_errors: true
+      when: collect_persistence_info
+
     - name: Perform AIDE File Integrity Check
       tags: aide
       block:
@@ -355,7 +443,7 @@
           become: true
 
         - name: Check if AIDE command is available
-          ansible.builtin.command: command -v aide
+          ansible.builtin.shell: command -v aide
           register: aide_exists
           changed_when: false
           ignore_errors: true # yaml[truthy]
