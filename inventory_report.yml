@@ -13,7 +13,7 @@
     collect_system_info: true # For boot time and fs_usage
     collect_lynis_info: true
     collect_rkhunter_info: true
-    collect_aide_info: true
+    collect_aide_info: false
     collect_process_info: true
     collect_privilege_info: true
     collect_persistence_info: true
@@ -67,6 +67,7 @@
           register: upgradable_packages
           changed_when: false
           when: ansible_pkg_mgr == 'apt'
+          ignore_errors: true
       when: collect_packages_info
 
     - name: Gather Docker Information
@@ -181,7 +182,7 @@
           ansible.builtin.command: crontab -l
           register: root_cron
           changed_when: false
-          ignore_errors: true # yaml[truthy]
+          ignore_errors: true
       when: collect_user_logs_info
 
     - name: Gather System Information
@@ -215,6 +216,7 @@
             state: present
           register: lsof_install_result
           ignore_errors: true
+          become: true
 
         - name: Get open files and connections
           ansible.builtin.command: lsof -n
@@ -236,6 +238,7 @@
           register: security_tools_install_result # We still register to potentially use details about install success/failure in status, though direct check is better
           ignore_errors: true # yaml[truthy]
           when: collect_lynis_info or collect_rkhunter_info
+          become: true
 
         - name: Check if rkhunter is available
           ansible.builtin.command: command -v rkhunter
@@ -287,6 +290,7 @@
             src: /etc/sudoers
           register: sudoers_file
           ignore_errors: true
+          become: true
 
         - name: Find sudoers.d files
           ansible.builtin.find:
@@ -301,6 +305,7 @@
           register: sudoers_d_content
           loop: "{{ sudoers_d_files.files | default([]) }}"
           ignore_errors: true
+          become: true
 
         - name: Get all users
           ansible.builtin.getent:
@@ -314,13 +319,29 @@
           loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
           changed_when: false
           ignore_errors: true
+          become: true
+
+        - name: Check for existence of authorized_keys for all users
+          ansible.builtin.stat:
+            path: "{{ item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys_stat
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.value[5] is defined and item.value[5].startswith('/home') and item.value[5] != '/home'
+          become: true
+          ignore_errors: true
 
         - name: Get all users SSH authorized keys
           ansible.builtin.slurp:
-            src: "{{ item.value.6 }}/.ssh/authorized_keys"
+            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
           register: ssh_keys
-          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          loop: "{{ ssh_keys_stat.results }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+          when: item.stat is defined and item.stat.exists and item.stat.isreg
           ignore_errors: true
+          become: true
       when: collect_privilege_info
 
     - name: Gather Persistence Mechanisms
@@ -342,9 +363,10 @@
             state: present
           register: aide_install_result
           ignore_errors: true # yaml[truthy]
+          become: true
 
         - name: Check if AIDE command is available
-          ansible.builtin.command: command -v aide
+          ansible.builtin.shell: command -v aide
           register: aide_exists
           changed_when: false
           ignore_errors: true # yaml[truthy]
@@ -372,11 +394,25 @@
                 path: /var/lib/aide
                 state: directory
                 mode: '0755'
+              become: true
+            - name: Copy AIDE configuration file
+              ansible.builtin.copy:
+                src: aide.conf
+                dest: /etc/aide/aide.conf
+                mode: '0644'
+              become: true
             - name: Initialize AIDE database on target
-              ansible.builtin.command: aide --init
+              ansible.builtin.command: aide --config /etc/aide/aide.conf --init
               register: aide_init_result
               changed_when: "'AIDE, version' in aide_init_result.stdout"
               ignore_errors: true # yaml[truthy]
+              become: true
+
+            - name: Move new AIDE database to active path
+              ansible.builtin.command: mv /var/lib/aide/aide.db.new.gz {{ aide_target_db_path }}
+              when: aide_init_result.rc == 0
+              changed_when: true
+              become: true
 
             - name: Move new AIDE database to active path
               ansible.builtin.command: mv /var/lib/aide/aide.db.new.gz {{ aide_target_db_path }}
@@ -390,6 +426,7 @@
                 flat: true
                 fail_on_missing: true
               when: aide_init_result.rc == 0
+              become: true
 
             - name: Set fact that baseline was initialized
               ansible.builtin.set_fact:
@@ -450,7 +487,7 @@
               "lynis_status": (
                 "Skipped" if not collect_lynis_info else
                 ("Tool not found" if (lynis_exists is not defined or lynis_exists.rc != 0) else
-                  ("Scan not run" if lynis_scan_result is not defined else # Should not happen if lynis_exists.rc == 0
+                  ("Scan not run" if lynis_scan_result is not defined else
                    ("Error during run" if lynis_scan_result.failed or (lynis_scan_result.rc is defined and lynis_scan_result.rc != 0) else
                     ("Collected" if lynis_scan_result.stdout_lines | length > 0 else "No output")
                    )
@@ -463,7 +500,7 @@
               "rkhunter_status": (
                 "Skipped" if not collect_rkhunter_info else
                 ("Tool not found" if (rkhunter_exists is not defined or rkhunter_exists.rc != 0) else
-                  ("Scan not run" if rkhunter_scan_result is not defined else # Should not happen if rkhunter_exists.rc == 0
+                  ("Scan not run" if rkhunter_scan_result is not defined else
                    ("Error during run" if rkhunter_scan_result.failed or (rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc != 0) else
                     ("Collected" if rkhunter_scan_result.stdout_lines | length > 0 else "No output")
                    )
@@ -479,20 +516,15 @@
                   ("Baseline initialized and fetched" if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
                     ("Baseline not found on controller (init failed or not attempted this run)" if not (aide_baseline_on_controller_stat is defined and aide_baseline_on_controller_stat.stat.exists is defined and aide_baseline_on_controller_stat.stat.exists) else
                       ("AIDE check task did not run (e.g. baseline copy failed or AIDE command issue)" if aide_check_result is not defined else
-                        ("Error during AIDE check" if (aide_check_result.failed or aide_check_result.rc is not defined) else # .failed is true if module has critical error
-                          ("No changes found" if aide_check_result.rc == 0 else "Changes found") # Any positive RC means changes
+                        ("Error during AIDE check" if (aide_check_result.failed or aide_check_result.rc is not defined) else
+                          ("No changes found" if aide_check_result.rc == 0 else "Changes found")
                         )
                       )
                     )
                   )
                 )
               ),
-              "aide_output": (
-                aide_check_result.stdout_lines | default([]) if collect_aide_info and aide_check_result is defined and aide_check_result.rc is defined else
-                (["Baseline initialized, no check performed on this run."] if aide_baseline_initialized_this_run is defined and aide_baseline_initialized_this_run else
-                  ["AIDE data not available due to previous errors or status."] # Fallback message
-                )
-              ),
+              "aide_output": (aide_check_result.stdout_lines | default([]) if collect_aide_info and aide_check_result is defined else "Skipped"),
 
               "process_info_collected": "{{ collect_process_info }}",
               "process_list": (process_list.stdout_lines | default([]) if collect_process_info else "Skipped"),
@@ -502,7 +534,7 @@
               "sudoers_file": (sudoers_file.content | b64decode | default('') if collect_privilege_info else "Skipped"),
               "sudoers_d_content": (sudoers_d_content.results | default([]) if collect_privilege_info else "Skipped"),
               "user_cron_jobs": (user_cron_jobs.results | default([]) if collect_privilege_info else "Skipped"),
-              "ssh_keys": (ssh_keys.results | default([]) if collect_privilege_info else "Skipped"),
+              "ssh_keys": (ssh_keys.results | selectattr('skipped', 'undefined') | map(attribute='content') | map('b64decode') | list if collect_privilege_info else "Skipped"),
 
               "persistence_info_collected": "{{ collect_persistence_info }}",
               "systemd_timers": (systemd_timers.stdout_lines | default([]) if collect_persistence_info else "Skipped")
