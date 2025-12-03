@@ -414,6 +414,11 @@
               changed_when: true
               become: true
 
+            - name: Move new AIDE database to active path
+              ansible.builtin.command: mv /var/lib/aide/aide.db.new.gz {{ aide_target_db_path }}
+              when: aide_init_result.rc == 0
+              changed_when: true
+
             - name: Fetch AIDE baseline from target to controller
               ansible.builtin.fetch:
                 src: "{{ aide_target_db_path }}"
