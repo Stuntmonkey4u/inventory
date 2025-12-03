@@ -11,8 +11,7 @@
     collect_network_info: true
     collect_user_logs_info: true
     collect_system_info: true # For boot time and fs_usage
-    collect_lynis_info: true
-    collect_rkhunter_info: true
+    collect_lynis_info: false
     collect_aide_info: false
     collect_process_info: true
     collect_privilege_info: true
@@ -226,35 +225,18 @@
           ignore_errors: true
       when: collect_process_info
 
-    - name: Perform Security Scans (Lynis, Rkhunter)
+    - name: Perform Security Scans (Lynis)
       tags: security_scans
       block:
-        - name: Ensure security scan tools are installed (lynis, rkhunter)
+        - name: Ensure security scan tools are installed (lynis)
           ansible.builtin.package:
             name:
               - lynis
-              - rkhunter
             state: present
           register: security_tools_install_result # We still register to potentially use details about install success/failure in status, though direct check is better
           ignore_errors: true # yaml[truthy]
-          when: collect_lynis_info or collect_rkhunter_info
+          when: collect_lynis_info
           become: true
-
-        - name: Check if rkhunter is available
-          ansible.builtin.command: command -v rkhunter
-          register: rkhunter_exists
-          changed_when: false
-          ignore_errors: true # yaml[truthy]
-          when: collect_rkhunter_info
-
-        - name: Update rkhunter database (might require internet)
-          ansible.builtin.command: rkhunter --update
-          register: rkhunter_update_result
-          changed_when: "'updated' in rkhunter_update_result.stdout | lower"
-          ignore_errors: true # yaml[truthy]
-          when:
-            - collect_rkhunter_info
-            - rkhunter_exists is defined and rkhunter_exists.rc == 0
 
         - name: Check if lynis is available
           ansible.builtin.command: command -v lynis
@@ -271,16 +253,95 @@
           when:
             - collect_lynis_info
             - lynis_exists is defined and lynis_exists.rc == 0
+      when: collect_lynis_info
 
-        - name: Run Rkhunter Scan
-          ansible.builtin.command: rkhunter --check --sk --nocolors
-          register: rkhunter_scan_result
+    - name: Gather User and Privilege Auditing
+      tags: user_privilege
+      block:
+        - name: Get sudoers file content
+          ansible.builtin.slurp:
+            src: /etc/sudoers
+          register: sudoers_file
+          ignore_errors: true
+          become: true
+
+        - name: Find sudoers.d files
+          ansible.builtin.find:
+            paths: /etc/sudoers.d
+            recurse: yes
+          register: sudoers_d_files
+          ignore_errors: true
+
+        - name: Get content of sudoers.d files
+          ansible.builtin.slurp:
+            src: "{{ item.path }}"
+          register: sudoers_d_content
+          loop: "{{ sudoers_d_files.files | default([]) }}"
+          ignore_errors: true
+          become: true
+
+        - name: Get all users
+          ansible.builtin.getent:
+            database: passwd
+          register: all_users
+          ignore_errors: true
+
+        - name: Get all users cron jobs
+          ansible.builtin.command: "crontab -l -u {{ item.key }}"
+          register: user_cron_jobs
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
           changed_when: false
-          ignore_errors: true # yaml[truthy]
-          when:
-            - collect_rkhunter_info
-            - rkhunter_exists is defined and rkhunter_exists.rc == 0
-      when: collect_lynis_info or collect_rkhunter_info
+          ignore_errors: true
+          become: true
+
+        - name: Check for existence of authorized_keys for all users
+          ansible.builtin.stat:
+            path: "{{ item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys_stat
+          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.value[5] is defined and item.value[5].startswith('/')
+          become: true
+          ignore_errors: true
+
+        - name: Get all users SSH authorized keys
+          ansible.builtin.slurp:
+            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
+          register: ssh_keys
+          loop: "{{ ssh_keys_stat.results }}"
+          loop_control:
+            label: "{{ item.item.key }}"
+          when: item.stat is defined and item.stat.exists and item.stat.isreg
+          ignore_errors: true
+          become: true
+      when: collect_privilege_info
+
+    - name: Initialize prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: []
+      when: collect_privilege_info
+
+    - name: Build prepared_ssh_keys list
+      ansible.builtin.set_fact:
+        prepared_ssh_keys: "{{ prepared_ssh_keys + [{'user': item.item.item.key, 'key': item.content | b64decode}] }}"
+      loop: "{{ ssh_keys.results | default([]) | selectattr('skipped', 'undefined') | selectattr('content', 'defined') }}"
+      loop_control:
+        label: "{{ item.item.item.key }}"
+      when:
+        - collect_privilege_info
+        - ssh_keys is defined
+        - ssh_keys.results is defined
+
+    - name: Gather Persistence Mechanisms
+      tags: persistence
+      block:
+        - name: Get systemd timers
+          ansible.builtin.command: systemctl list-timers
+          register: systemd_timers
+          changed_when: false
+          ignore_errors: true
+      when: collect_persistence_info
 
     - name: Gather User and Privilege Auditing
       tags: user_privilege
@@ -506,19 +567,6 @@
                 )
               ),
               "lynis_output": (lynis_scan_result.stdout_lines | default([]) if collect_lynis_info and lynis_exists is defined and lynis_exists.rc == 0 and lynis_scan_result is defined and not lynis_scan_result.failed and lynis_scan_result.rc is defined and lynis_scan_result.rc == 0 else []),
-
-              "rkhunter_collected": "{{ collect_rkhunter_info }}",
-              "rkhunter_status": (
-                "Skipped" if not collect_rkhunter_info else
-                ("Tool not found" if (rkhunter_exists is not defined or rkhunter_exists.rc != 0) else
-                  ("Scan not run" if rkhunter_scan_result is not defined else
-                   ("Error during run" if rkhunter_scan_result.failed or (rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc != 0) else
-                    ("Collected" if rkhunter_scan_result.stdout_lines | length > 0 else "No output")
-                   )
-                  )
-                )
-              ),
-              "rkhunter_output": (rkhunter_scan_result.stdout_lines | default([]) if collect_rkhunter_info and rkhunter_exists is defined and rkhunter_exists.rc == 0 and rkhunter_scan_result is defined and not rkhunter_scan_result.failed and rkhunter_scan_result.rc is defined and rkhunter_scan_result.rc == 0 else []),
 
               "aide_collected": "{{ collect_aide_info }}",
               "aide_status": (

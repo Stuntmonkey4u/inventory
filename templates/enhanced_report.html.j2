@@ -464,29 +464,6 @@
             {% endif %}
         </details>
 
-        <details>
-            <summary>Rkhunter Scan Results</summary>
-            {% if not details.rkhunter_collected %}
-                <p>Data collection for this section was skipped by the user.</p>
-            {% elif details.rkhunter_status == "Tool not found" %}
-                <p>Rkhunter tool not found on the host. Scan not performed.</p>
-            {% elif details.rkhunter_status == "Scan not run" %}
-                <p>Rkhunter scan did not run. Please check playbook logic or tool availability.</p>
-            {% elif details.rkhunter_status == "Error during run" %}
-                <p>An error occurred during the Rkhunter scan. Output may be incomplete or unavailable.</p>
-                {% if details.rkhunter_output and details.rkhunter_output | length > 0 %}
-                    <pre>{{ details.rkhunter_output | join('\n') | e }}</pre>
-                {% else %}
-                    <p>No specific error output captured.</p>
-                {% endif %}
-            {% elif details.rkhunter_status == "No output" %}
-                <p>Rkhunter scan ran but produced no output.</p>
-            {% elif details.rkhunter_status == "Collected" and details.rkhunter_output and details.rkhunter_output | length > 0 %}
-                <pre>{{ details.rkhunter_output | join('\n') | e }}</pre>
-            {% else %}
-                <p>Rkhunter scan data is unavailable or status is unknown: {{ details.rkhunter_status | e }}</p>
-            {% endif %}
-        </details>
 
         <details>
             <summary>AIDE File Integrity Check</summary>
@@ -699,6 +676,98 @@
                 {% endfor %}
             {% endif %}
         </details>
+
+        <h3 id="processes-{{ host }}">Processes</h3>
+        <details>
+            <summary>Process List</summary>
+            {% if not details.process_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.process_list == "Skipped" or not details.process_list or (details.process_list is sequence and details.process_list | length == 0) %}
+                <p>No process list data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.process_list | join('\n')) | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Open Files</summary>
+            {% if not details.process_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.open_files == "Skipped" or not details.open_files or (details.open_files is sequence and details.open_files | length == 0) %}
+                <p>No open files data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.open_files | join('\n')) | e }}</pre>
+            {% endif %}
+        </details>
+
+        <h3 id="users-{{ host }}">Users & System</h3>
+        <details>
+            <summary>Sudoers File</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.sudoers_file == "Skipped" or not details.sudoers_file %}
+                <p>No sudoers file data available for this host.</p>
+            {% else %}
+                <pre>{{ details.sudoers_file | e }}</pre>
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>Sudoers.d Files</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.sudoers_d_content == "Skipped" or not details.sudoers_d_content or (details.sudoers_d_content is sequence and details.sudoers_d_content | length == 0) %}
+                <p>No sudoers.d files data available for this host.</p>
+            {% else %}
+                {% for file_info in details.sudoers_d_content %}
+                    {% if file_info.content %}
+                    <h4>File: {{ file_info.item.path | e }}</h4>
+                    <pre>{{ (file_info.content | b64decode) | e }}</pre>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>User Cron Jobs</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.user_cron_jobs == "Skipped" or not details.user_cron_jobs or (details.user_cron_jobs is sequence and details.user_cron_jobs | length == 0) %}
+                <p>No user cron jobs data available for this host.</p>
+            {% else %}
+                {% for item in details.user_cron_jobs %}
+                    <h4>{{ item.item.key | e }}</h4>
+                    <pre>{{ item.stdout | e }}</pre>
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <details>
+            <summary>SSH Keys</summary>
+            {% if not details.privilege_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.ssh_keys == "Skipped" or not details.ssh_keys or (details.ssh_keys is sequence and details.ssh_keys | length == 0) %}
+                <p>No SSH keys data available for this host.</p>
+            {% else %}
+                {% for key_info in details.ssh_keys %}
+                    <h4>User: {{ key_info.user | e }}</h4>
+                    <pre>{{ key_info.key | e }}</pre>
+                {% endfor %}
+            {% endif %}
+        </details>
+
+        <h3 id="persistence-{{ host }}">Persistence</h3>
+        <details>
+            <summary>Systemd Timers</summary>
+            {% if not details.persistence_info_collected %}
+                <p>Data collection for this section was skipped by the user.</p>
+            {% elif details.systemd_timers == "Skipped" or not details.systemd_timers or (details.systemd_timers is sequence and details.systemd_timers | length == 0) %}
+                <p>No systemd timers data available for this host.</p>
+            {% else %}
+                <pre>{{ (details.systemd_timers | join('\n')) | e }}</pre>
+            {% endif %}
+        </details>
+
 
         <h3 id="processes-{{ host }}">Processes</h3>
         <details>

@@ -37,7 +37,6 @@ The playbook collects the following types of information:
     *   Docker version and list of running containers
 *   **Security Scans (if tools are installed):**
     *   **Lynis:** Performs a system audit.
-    *   **Rkhunter:** Checks for rootkits and other malware.
 *   **File Integrity Monitoring (with AIDE):**
     *   If enabled, initializes an AIDE baseline on the first run for a host.
     *   Subsequent runs check file integrity against this baseline and report any changes.
@@ -59,7 +58,7 @@ The generated HTML report is designed for ease of use and quick analysis:
 *   **Target Hosts:**
     *   SSH access with a user that has `sudo` privileges. The playbook uses `become: true` for tasks that require root access.
     *   Python installed (version compatible with Ansible).
-    *   For specific data collection, the relevant tools must be installed on the target (e.g., `lsof`, `lynis`, `rkhunter`, `aide`). The playbook attempts to handle missing tools gracefully.
+    *   For specific data collection, the relevant tools must be installed on the target (e.g., `lsof`, `lynis`, `aide`). The playbook attempts to handle missing tools gracefully.
 
 ## How to Use
 
@@ -100,7 +99,6 @@ collect_process_info: true
 collect_privilege_info: true
 collect_persistence_info: true
 collect_lynis_info: false
-collect_rkhunter_info: false
 collect_aide_info: false
 ```
 
