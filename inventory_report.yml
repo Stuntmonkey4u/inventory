@@ -382,7 +382,7 @@
           become: true
 
         - name: Check if AIDE command is available
-          ansible.builtin.command: command -v aide
+          ansible.builtin.shell: command -v aide
           register: aide_exists
           changed_when: false
           ignore_errors: true # yaml[truthy]
