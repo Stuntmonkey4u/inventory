@@ -12,6 +12,7 @@ const Auth = ({ setToken }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [userCount, setUserCount] = useState(0);
+  const [apiError, setApiError] = useState(false);
 
   useEffect(() => {
     const checkUserCount = async () => {
@@ -20,9 +21,10 @@ const Auth = ({ setToken }) => {
         const count = response.data.count;
         setUserCount(count);
         setIsLogin(count > 0);
+        setApiError(false);
       } catch (err) {
-        console.error('Failed to check user count');
-        setIsLogin(true); // Fallback to login if API fails
+        console.error('Failed to check user count', err);
+        setApiError(true);
       }
     };
     checkUserCount();
@@ -53,6 +55,29 @@ const Auth = ({ setToken }) => {
       setError(err.response?.data?.detail || (isLogin ? 'Invalid username or password' : 'Registration failed'));
     }
   };
+
+  if (apiError) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-gray-900 text-white p-4">
+        <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-red-900/50 text-center">
+          <div className="bg-red-900/20 p-3 rounded-full mb-4 inline-block">
+            <AlertCircle className="text-red-500 size-10" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Connection Error</h2>
+          <p className="text-gray-400 mb-6">
+            Unable to connect to the backend API at <br/>
+            <code className="text-xs bg-black/30 p-1 rounded mt-1 inline-block">{api.defaults.baseURL}</code>
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg font-bold transition"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLogin === null) {
     return (
