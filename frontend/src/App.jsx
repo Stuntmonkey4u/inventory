@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { LayoutDashboard, Server, Shield, LogOut, LogIn, UserPlus, Search } from 'lucide-react';
+import { LayoutDashboard, Server, Shield, LogOut, Search } from 'lucide-react';
 import api from './api';
+import Hosts from './pages/Hosts';
+import ScanDetail from './pages/ScanDetail';
 
 const Login = ({ setToken }) => {
   const [username, setUsername] = useState('');
@@ -177,7 +179,8 @@ function App() {
       <Layout setToken={setToken}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/hosts" element={<div className="p-6"><h1>Hosts Management</h1><p>Coming in next bite!</p></div>} />
+          <Route path="/hosts" element={<Hosts />} />
+          <Route path="/scans/:scanId" element={<ScanDetail />} />
           <Route path="/search" element={<div className="p-6"><h1>Global Search</h1><p>Coming in next bite!</p></div>} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
