@@ -73,7 +73,7 @@
       tags: docker
       block:
         - name: Check for Docker command
-          ansible.builtin.command: command -v docker
+          ansible.builtin.shell: command -v docker
           register: docker_cmd_check
           changed_when: false
           ignore_errors: true # yaml[truthy]
@@ -97,7 +97,7 @@
       tags: network
       block:
         - name: Check for ss command
-          ansible.builtin.command: command -v ss
+          ansible.builtin.shell: command -v ss
           register: ss_cmd_check
           changed_when: false
           ignore_errors: true # yaml[truthy]
@@ -110,7 +110,7 @@
           ignore_errors: true # yaml[truthy]
 
         - name: Check for netstat command
-          ansible.builtin.command: command -v netstat
+          ansible.builtin.shell: command -v netstat
           register: netstat_cmd_check
           when: ss_cmd_check.rc != 0 # Only check if ss is not available
           changed_when: false
@@ -134,7 +134,7 @@
           tags: firewall
           block:
             - name: Check for iptables command
-              ansible.builtin.command: command -v iptables
+              ansible.builtin.shell: command -v iptables
               register: iptables_cmd_check
               changed_when: false
               ignore_errors: true # yaml[truthy]
@@ -147,7 +147,7 @@
               ignore_errors: true # yaml[truthy]
 
             - name: Check for ufw command
-              ansible.builtin.command: command -v ufw
+              ansible.builtin.shell: command -v ufw
               register: ufw_cmd_check
               when: iptables_cmd_check.rc != 0 # Only check if iptables is not available
               changed_when: false
@@ -239,7 +239,7 @@
           become: true
 
         - name: Check if lynis is available
-          ansible.builtin.command: command -v lynis
+          ansible.builtin.shell: command -v lynis
           register: lynis_exists
           changed_when: false
           ignore_errors: true # yaml[truthy]
@@ -296,18 +296,18 @@
 
         - name: Check for existence of authorized_keys for all users
           ansible.builtin.stat:
-            path: "{{ item.value[5] }}/.ssh/authorized_keys"
+            path: "{{ item.value[4] }}/.ssh/authorized_keys"
           register: ssh_keys_stat
           loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
           loop_control:
             label: "{{ item.key }}"
-          when: item.value[5] is defined and item.value[5].startswith('/')
+          when: item.value[4] is defined and item.value[4].startswith('/')
           become: true
           ignore_errors: true
 
         - name: Get all users SSH authorized keys
           ansible.builtin.slurp:
-            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
+            src: "{{ item.item.value[4] }}/.ssh/authorized_keys"
           register: ssh_keys
           loop: "{{ ssh_keys_stat.results }}"
           loop_control:
@@ -343,93 +343,6 @@
           ignore_errors: true
       when: collect_persistence_info
 
-    - name: Gather User and Privilege Auditing
-      tags: user_privilege
-      block:
-        - name: Get sudoers file content
-          ansible.builtin.slurp:
-            src: /etc/sudoers
-          register: sudoers_file
-          ignore_errors: true
-          become: true
-
-        - name: Find sudoers.d files
-          ansible.builtin.find:
-            paths: /etc/sudoers.d
-            recurse: yes
-          register: sudoers_d_files
-          ignore_errors: true
-
-        - name: Get content of sudoers.d files
-          ansible.builtin.slurp:
-            src: "{{ item.path }}"
-          register: sudoers_d_content
-          loop: "{{ sudoers_d_files.files | default([]) }}"
-          ignore_errors: true
-          become: true
-
-        - name: Get all users
-          ansible.builtin.getent:
-            database: passwd
-          register: all_users
-          ignore_errors: true
-
-        - name: Get all users cron jobs
-          ansible.builtin.command: "crontab -l -u {{ item.key }}"
-          register: user_cron_jobs
-          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
-          changed_when: false
-          ignore_errors: true
-          become: true
-
-        - name: Check for existence of authorized_keys for all users
-          ansible.builtin.stat:
-            path: "{{ item.value[5] }}/.ssh/authorized_keys"
-          register: ssh_keys_stat
-          loop: "{{ all_users.ansible_facts.getent_passwd | default({}) | dict2items }}"
-          loop_control:
-            label: "{{ item.key }}"
-          when: item.value[5] is defined and item.value[5].startswith('/')
-          become: true
-          ignore_errors: true
-
-        - name: Get all users SSH authorized keys
-          ansible.builtin.slurp:
-            src: "{{ item.item.value[5] }}/.ssh/authorized_keys"
-          register: ssh_keys
-          loop: "{{ ssh_keys_stat.results }}"
-          loop_control:
-            label: "{{ item.item.key }}"
-          when: item.stat is defined and item.stat.exists and item.stat.isreg
-          ignore_errors: true
-          become: true
-      when: collect_privilege_info
-
-    - name: Initialize prepared_ssh_keys list
-      ansible.builtin.set_fact:
-        prepared_ssh_keys: []
-      when: collect_privilege_info
-
-    - name: Build prepared_ssh_keys list
-      ansible.builtin.set_fact:
-        prepared_ssh_keys: "{{ prepared_ssh_keys + [{'user': item.item.item.key, 'key': item.content | b64decode}] }}"
-      loop: "{{ ssh_keys.results | default([]) | selectattr('skipped', 'undefined') | selectattr('content', 'defined') }}"
-      loop_control:
-        label: "{{ item.item.item.key }}"
-      when:
-        - collect_privilege_info
-        - ssh_keys is defined
-        - ssh_keys.results is defined
-
-    - name: Gather Persistence Mechanisms
-      tags: persistence
-      block:
-        - name: Get systemd timers
-          ansible.builtin.command: systemctl list-timers
-          register: systemd_timers
-          changed_when: false
-          ignore_errors: true
-      when: collect_persistence_info
 
     - name: Perform AIDE File Integrity Check
       tags: aide

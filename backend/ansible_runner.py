@@ -3,15 +3,24 @@ import json
 import subprocess
 import tempfile
 import logging
-from sqlalchemy.orm import Session
+from database import SessionLocal
 import models, security
 
 logger = logging.getLogger(__name__)
 
-def run_ansible_scan(host_id: int, db: Session):
-    host = db.query(models.Host).filter(models.Host.id == host_id).first()
-    if not host:
-        return
+def run_ansible_scan(host_id: int, scan_id: int):
+    db = SessionLocal()
+    try:
+        scan_result = db.query(models.ScanResult).filter(models.ScanResult.id == scan_id).first()
+        if not scan_result:
+            return
+
+        host = db.query(models.Host).filter(models.Host.id == host_id).first()
+        if not host:
+            scan_result.status = "failed"
+            scan_result.data = {"error": "Host not found"}
+            db.commit()
+            return
 
     # Create a temporary directory for this scan
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -95,46 +104,28 @@ def run_ansible_scan(host_id: int, db: Session):
                         report_data_raw = json.load(f)
                         report_data = report_data_raw.get(host.hostname, report_data_raw)
 
-                        scan_result = models.ScanResult(
-                            host_id=host.id,
-                            data=report_data,
-                            status="success"
-                        )
-                        db.add(scan_result)
+                        scan_result.data = report_data
+                        scan_result.status = "success"
                         db.commit()
                 else:
-                    scan_result = models.ScanResult(
-                        host_id=host.id,
-                        data={"error": "Report file not found", "stdout": sanitize(process.stdout)},
-                        status="failed"
-                    )
-                    db.add(scan_result)
+                    scan_result.data = {"error": "Report file not found", "stdout": sanitize(process.stdout)}
+                    scan_result.status = "failed"
                     db.commit()
             else:
-                scan_result = models.ScanResult(
-                    host_id=host.id,
-                    data={
-                        "error": "Ansible execution failed",
-                        "stdout": sanitize(process.stdout),
-                        "stderr": sanitize(process.stderr)
-                    },
-                    status="failed"
-                )
-                db.add(scan_result)
+                scan_result.data = {
+                    "error": "Ansible execution failed",
+                    "stdout": sanitize(process.stdout),
+                    "stderr": sanitize(process.stderr)
+                }
+                scan_result.status = "failed"
                 db.commit()
         except subprocess.TimeoutExpired:
-            scan_result = models.ScanResult(
-                host_id=host.id,
-                data={"error": "Scan timed out after 10 minutes"},
-                status="failed"
-            )
-            db.add(scan_result)
+            scan_result.data = {"error": "Scan timed out after 10 minutes"}
+            scan_result.status = "failed"
             db.commit()
         except Exception as e:
-            scan_result = models.ScanResult(
-                host_id=host.id,
-                data={"error": f"Unexpected error: {str(e)}"},
-                status="failed"
-            )
-            db.add(scan_result)
+            scan_result.data = {"error": f"Unexpected error: {str(e)}"}
+            scan_result.status = "failed"
             db.commit()
+    finally:
+        db.close()
