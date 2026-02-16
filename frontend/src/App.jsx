@@ -7,22 +7,22 @@ import ScanDetail from './pages/ScanDetail';
 import GlobalSearch from './pages/GlobalSearch';
 
 const Auth = ({ setToken }) => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(null); // null means loading
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [userCount, setUserCount] = useState(null);
+  const [userCount, setUserCount] = useState(0);
 
   useEffect(() => {
     const checkUserCount = async () => {
       try {
         const response = await api.get('/users/count');
-        setUserCount(response.data.count);
-        if (response.data.count === 0) {
-          setIsLogin(false);
-        }
+        const count = response.data.count;
+        setUserCount(count);
+        setIsLogin(count > 0);
       } catch (err) {
         console.error('Failed to check user count');
+        setIsLogin(true); // Fallback to login if API fails
       }
     };
     checkUserCount();
@@ -54,6 +54,14 @@ const Auth = ({ setToken }) => {
     }
   };
 
+  if (isLogin === null) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-gray-900 text-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-gray-900 text-white p-4">
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-700">
@@ -83,6 +91,7 @@ const Auth = ({ setToken }) => {
               type="text"
               className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
               placeholder="admin"
+              autoComplete={isLogin ? "username" : "new-password"}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -94,6 +103,7 @@ const Auth = ({ setToken }) => {
               type="password"
               className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
               placeholder="••••••••"
+              autoComplete={isLogin ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
