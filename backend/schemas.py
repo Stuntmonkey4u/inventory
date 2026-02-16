@@ -55,6 +55,12 @@ class Host(HostBase):
     class Config:
         from_attributes = True
 
+class SearchResult(BaseModel):
+    host: Host
+    scan_id: Optional[int] = None
+    match_type: str # 'host' or 'data'
+    snippet: Optional[str] = None
+
 class ScanResultBase(BaseModel):
     host_id: int
     data: Any

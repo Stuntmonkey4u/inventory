@@ -30,12 +30,12 @@ Turn the existing Ansible forensic playbook into a comprehensive network adminis
 - [x] Integration of the Ansible playbook via background tasks.
 - [x] Displaying scan results in the GUI (JSON parsing & detailed report view).
 
-### Phase 3: Search & Advanced Reporting (Current)
-- [ ] Global search functionality (searching across all scan data).
-- [ ] Historical data comparison (finding changes over time).
+### Phase 3: Search & Advanced Reporting (Completed)
+- [x] Global search functionality (searching across all scan data).
+- [x] Historical data comparison (finding changes over time - "Diff" view).
 - [ ] Exporting reports (PDF).
 
-### Phase 4: Visualization & Discovery
+### Phase 4: Visualization & Discovery (Next)
 - [ ] Rack Designer (Drag & Drop).
 - [ ] Network Topology auto-discovery.
 - [ ] Real-time status monitoring.
@@ -45,3 +45,4 @@ Turn the existing Ansible forensic playbook into a comprehensive network adminis
 - [x] Creation of `TODO.md`.
 - [x] Phase 1: Core Infrastructure.
 - [x] Phase 2: Host & Scan Management.
+- [x] Phase 3: Search & Diff reporting.

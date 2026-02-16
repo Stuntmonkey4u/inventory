@@ -4,6 +4,7 @@ import { LayoutDashboard, Server, Shield, LogOut, Search } from 'lucide-react';
 import api from './api';
 import Hosts from './pages/Hosts';
 import ScanDetail from './pages/ScanDetail';
+import GlobalSearch from './pages/GlobalSearch';
 
 const Login = ({ setToken }) => {
   const [username, setUsername] = useState('');
@@ -181,7 +182,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/hosts" element={<Hosts />} />
           <Route path="/scans/:scanId" element={<ScanDetail />} />
-          <Route path="/search" element={<div className="p-6"><h1>Global Search</h1><p>Coming in next bite!</p></div>} />
+          <Route path="/search" element={<GlobalSearch />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

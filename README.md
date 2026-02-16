@@ -1,120 +1,94 @@
-# Network Forensic Inventory Ansible Playbook
+# Network Forensic Inventory (NFI)
 
 ## Overview
 
-This Ansible playbook is designed to collect detailed forensic-style inventory information from target hosts. It gathers a wide range of data about the system's configuration, running state, and potential indicators of activity, which can be useful for system auditing, troubleshooting, or preliminary forensic investigations.
+Network Forensic Inventory (NFI) is a comprehensive network administration and forensic auditing tool. It transforms traditional Ansible-based inventory collection into a modern, interactive web application. NFI allows network admins to monitor their infrastructure, perform deep forensic scans, track changes over time, and search across their entire network for specific programs, IP addresses, or configurations.
 
-The playbook generates two key outputs:
-1.  An **interactive and visually enhanced HTML report** with features like light/dark mode, filtering, and sorting.
-2.  A **machine-readable JSON report** containing all the raw data for programmatic analysis.
+The core of NFI is an enhanced Ansible engine that collects detailed system state information, which is then processed and visualized through a professional web interface.
 
-## Features / Data Collected
+## Key Features
 
-The playbook collects the following types of information:
+*   **Modern Web Dashboard:** A sleek, responsive UI built with React and Tailwind CSS.
+*   **Automated Forensic Scanning:** Trigger deep-dive scans on remote hosts with a single click.
+*   **Historical Comparison (Diff):** Automatically identify changes between scans (e.g., new packages, modified services, added SSH keys, open ports).
+*   **Global Search:** Powerful search capability across all collected forensic data from all hosts. Find which server has "nginx" installed or which one has a specific user account.
+*   **Secure Credential Management:** Encrypted storage for SSH passwords and private keys using industry-standard Fernet encryption.
+*   **Host Management:** Easily add, edit, and organize hosts in your network inventory.
+*   **Dockerized Architecture:** Simple deployment using Docker Compose.
 
-*   **System Information:**
-    *   Hostname, IP Address, OS (Distribution and Version)
-    *   System Uptime and exact Boot Time
-    *   Filesystem Usage (`df -h`)
-*   **Service & Package Management:**
-    *   All system service statuses (`systemctl list-unit-files`)
-    *   Verified running system services (`systemctl list-units`)
-    *   List of all installed packages
-    *   List of upgradable packages (for apt-based systems)
-*   **Running Processes & Network:**
-    *   Full process list (`ps auxwww`)
-    *   Open files and network connections (`lsof -n`)
-    *   Listening TCP/UDP ports (`ss` or `netstat`)
-    *   Firewall rules (`iptables` or `ufw` status)
-*   **User and Privilege Auditing:**
-    *   Login history for all users (`lastlog`)
-    *   Sudoers configuration (`/etc/sudoers` and included files in `/etc/sudoers.d/`)
-    *   Cron jobs for the root user and all other users on the system
-    *   SSH `authorized_keys` for all users with a standard home directory
-*   **Persistence Mechanisms:**
-    *   Active `systemd` timers
-*   **Containerization (if installed):**
-    *   Docker version and list of running containers
-*   **Security Scans (if tools are installed):**
-    *   **Lynis:** Performs a system audit.
-*   **File Integrity Monitoring (with AIDE):**
-    *   If enabled, initializes an AIDE baseline on the first run for a host.
-    *   Subsequent runs check file integrity against this baseline and report any changes.
+## Architecture
 
-## HTML Report Features
+NFI is composed of three main services:
 
-The generated HTML report is designed for ease of use and quick analysis:
-*   **Light & Dark Mode:** Toggle between themes for comfortable viewing.
-*   **Quick Navigation:** A navigation bar at the top of each host's section allows you to jump directly to the data you need.
-*   **Filterable Tables:** Most tables include a search box to quickly filter rows.
-*   **Sortable Tables:** Click on table headers to sort the data by that column.
-*   **Collapsible Sections:** All data sections are collapsible, making it easy to focus on specific areas of interest.
-*   **Multi-Column Layout:** Large lists, such as installed packages, are displayed in a space-saving multi-column format.
+1.  **Frontend (React):** A modern SPA providing the user interface.
+2.  **Backend (FastAPI):** A high-performance Python API that manages the database, handles authentication, and orchestrates Ansible scans.
+3.  **Database (PostgreSQL):** Stores host information, encrypted credentials, and forensic scan results (using JSONB for high-performance searching).
 
-## Prerequisites
+## Data Collected
 
-*   **Control Node:**
-    *   Ansible installed (core version 2.16+ recommended).
-*   **Target Hosts:**
-    *   SSH access with a user that has `sudo` privileges. The playbook uses `become: true` for tasks that require root access.
-    *   Python installed (version compatible with Ansible).
-    *   For specific data collection, the relevant tools must be installed on the target (e.g., `lsof`, `lynis`, `aide`). The playbook attempts to handle missing tools gracefully.
+NFI's forensic engine collects:
+*   **System Info:** Uptime, boot time, OS details, filesystem usage.
+*   **Network:** Listening ports, established connections, firewall rules.
+*   **Services & Packages:** All installed packages, running services, and systemd timers.
+*   **Security:** SSH authorized keys, login history, cron jobs, sudoers configuration.
+*   **Containers:** Docker version and running container lists.
 
-## How to Use
+## Getting Started
 
-1.  **Prepare an Inventory File:**
-    Create an Ansible inventory file (e.g., `inventory.ini`) listing your target hosts.
-    ```ini
-    [servers]
-    host1.example.com
-    host2.example.com ansible_user=admin ansible_ssh_private_key_file=~/.ssh/id_rsa
-    ```
+### Prerequisites
+*   Docker and Docker Compose installed.
+*   Target hosts must be accessible via SSH (User needs `sudo` privileges for full forensic data).
 
-2.  **Run the Playbook:**
-    Execute the playbook from your control node:
+### Deployment
+
+1.  **Clone the repository:**
     ```bash
-    ansible-playbook -i inventory.ini inventory_report.yml
+    git clone <repository-url>
+    cd nfi
     ```
 
-## Output
+2.  **Start the application:**
+    ```bash
+    docker-compose up -d
+    ```
 
-The playbook generates reports in the `./reports/` directory:
+3.  **Access the UI:**
+    Open your browser and navigate to `http://localhost:5173`.
 
-*   **HTML Report:** `reports/inventory_report_<date>.html` - An interactive, human-readable report.
-*   **JSON Report:** `reports/inventory_report_<datetime>.json` - A machine-readable file with all raw data.
+4.  **Initial Login:**
+    The first time you access NFI, you will be prompted to create an admin account.
 
-## Customization
+## How it Works
 
-You can control which data is collected by passing variables with the `-e` flag. By default, most data collection is enabled, but security scans are disabled as they can be time-consuming.
+1.  **Add a Host:** Enter the hostname/IP and SSH credentials. Credentials are encrypted before being saved to the database.
+2.  **Trigger a Scan:** NFI launches an asynchronous Ansible playbook that connects to the host and collects forensic data.
+3.  **View Report:** Once complete, a detailed forensic report is generated.
+4.  **Compare:** If you've scanned a host before, use the "View Changes" button to see what has changed since the last successful scan.
+5.  **Search:** Use the Global Search to find data across your entire infrastructure.
 
-**Available Variables (Defaults Shown):**
-```yaml
-collect_services_info: true
-collect_packages_info: true
-collect_docker_info: true
-collect_network_info: true
-collect_user_logs_info: true
-collect_system_info: true
-collect_process_info: true
-collect_privilege_info: true
-collect_persistence_info: true
-collect_lynis_info: false
-collect_aide_info: false
-```
+## Development
 
-**Example: Enable AIDE and Lynis scans**
+If you wish to run the components individually for development:
+
+### Backend
 ```bash
-ansible-playbook -i inventory.ini inventory_report.yml -e "collect_aide_info=true collect_lynis_info=true"
+cd backend
+pip install -r requirements.txt
+export DATABASE_URL=postgresql://user:pass@localhost/nfi
+export SECRET_KEY=your-secret-key
+uvicorn main:app --reload
 ```
 
-**Example: Skip package and Docker collection**
+### Frontend
 ```bash
-ansible-playbook -i inventory.ini inventory_report.yml -e "collect_packages_info=false collect_docker_info=false"
+cd frontend
+npm install
+npm run dev
 ```
 
-### AIDE Baseline Management
+## Security Best Practices
 
-*   When `collect_aide_info: true`, the playbook manages AIDE baselines in the `./aide_baselines/` directory on the Ansible controller.
-*   **First Run:** The playbook will initialize AIDE on the target host and fetch the baseline database to the controller.
-*   **Subsequent Runs:** The playbook copies the stored baseline to the target and runs `aide --check` to find changes.
-*   **To re-baseline a host:** Simply delete its baseline file (e.g., `aide_baselines/hostname.db.gz`) from the controller. The playbook will automatically generate a new one on the next run.
+*   NFI uses JWT-based authentication.
+*   Sensitive SSH credentials never leave the backend in plain text.
+*   Ansible output is sanitized to prevent leaking passwords in logs.
+*   The application is designed to be run within a trusted management network.

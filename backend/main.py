@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func, String
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
 
-import models, schemas, auth, database, security, ansible_runner
+import models, schemas, auth, database, security, ansible_runner, diff_utils
 from database import engine
 
 models.Base.metadata.create_all(bind=engine)
@@ -107,6 +108,81 @@ def get_scan_result(scan_id: int, db: Session = Depends(database.get_db), curren
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+@app.get("/scans/{scan_id}/diff")
+def get_scan_diff(scan_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.get_current_user)):
+    current_scan = db.query(models.ScanResult).filter(models.ScanResult.id == scan_id).first()
+    if not current_scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    previous_scan = db.query(models.ScanResult).filter(
+        models.ScanResult.host_id == current_scan.host_id,
+        models.ScanResult.id < current_scan.id,
+        models.ScanResult.status == "success"
+    ).order_by(models.ScanResult.id.desc()).first()
+
+
+    if not previous_scan:
+        return {"has_previous": False, "diff": {}}
+
+    diff = diff_utils.compare_forensic_data(previous_scan.data, current_scan.data)
+    return {
+        "has_previous": True,
+        "previous_scan_id": previous_scan.id,
+        "previous_timestamp": previous_scan.timestamp,
+        "diff": diff
+    }
+
+@app.get("/search", response_model=List[schemas.SearchResult])
+def search_inventory(q: str, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.get_current_user)):
+    if not q or len(q) < 2:
+        return []
+
+    results = []
+    # 1. Search Host metadata
+    host_matches = db.query(models.Host).filter(
+        (models.Host.hostname.ilike(f"%{q}%")) |
+        (models.Host.ip_address.ilike(f"%{q}%"))
+    ).all()
+
+    for host in host_matches:
+        results.append(schemas.SearchResult(
+            host=host,
+            match_type="host",
+            snippet=f"Matched host: {host.hostname} ({host.ip_address})"
+        ))
+
+    # 2. Search within latest ScanResults
+    latest_scans_subquery = db.query(
+        models.ScanResult.host_id,
+        func.max(models.ScanResult.timestamp).label('max_timestamp')
+    ).group_by(models.ScanResult.host_id).subquery()
+
+    data_matches = db.query(models.ScanResult).join(
+        latest_scans_subquery,
+        (models.ScanResult.host_id == latest_scans_subquery.c.host_id) &
+        (models.ScanResult.timestamp == latest_scans_subquery.c.max_timestamp)
+    ).filter(
+        func.cast(models.ScanResult.data, String).ilike(f"%{q}%")
+    ).all()
+
+    for scan in data_matches:
+        # Avoid duplicate entries if host also matched
+        if any(r.host.id == scan.host_id for r in results):
+            # Update the existing result with scan_id
+            for r in results:
+                if r.host.id == scan.host_id:
+                    r.scan_id = scan.id
+            continue
+
+        results.append(schemas.SearchResult(
+            host=scan.host,
+            scan_id=scan.id,
+            match_type="data",
+            snippet=f"Found match in forensic data"
+        ))
+
+    return results
 
 @app.get("/", tags=["Health"])
 def health_check():
