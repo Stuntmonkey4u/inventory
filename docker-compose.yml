@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nfi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nfi_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nfi_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+      - ./inventory_report.yml:/app/inventory_report.yml
+      - ./templates:/app/templates
+      - ./inventory.ini:/app/inventory.ini
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nfi_user}:${POSTGRES_PASSWORD:-nfi_password}@db:5432/${POSTGRES_DB:-nfi_db}
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
