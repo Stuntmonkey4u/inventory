@@ -36,6 +36,11 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.get("/users/count")
+def get_user_count(db: Session = Depends(database.get_db)):
+    count = db.query(models.User).count()
+    return {"count": count}
+
 @app.post("/register", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
     # Check if any user already exists

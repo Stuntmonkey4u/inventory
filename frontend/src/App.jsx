@@ -1,62 +1,119 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { LayoutDashboard, Server, Shield, LogOut, Search } from 'lucide-react';
+import { LayoutDashboard, Server, Shield, LogOut, Search, AlertCircle } from 'lucide-react';
 import api from './api';
 import Hosts from './pages/Hosts';
 import ScanDetail from './pages/ScanDetail';
 import GlobalSearch from './pages/GlobalSearch';
 
-const Login = ({ setToken }) => {
+const Auth = ({ setToken }) => {
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [userCount, setUserCount] = useState(null);
+
+  useEffect(() => {
+    const checkUserCount = async () => {
+      try {
+        const response = await api.get('/users/count');
+        setUserCount(response.data.count);
+        if (response.data.count === 0) {
+          setIsLogin(false);
+        }
+      } catch (err) {
+        console.error('Failed to check user count');
+      }
+    };
+    checkUserCount();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     try {
-      const formData = new FormData();
-      formData.append('username', username);
-      formData.append('password', password);
-      const response = await api.post('/token', formData);
-      localStorage.setItem('token', response.data.access_token);
-      setToken(response.data.access_token);
+      if (isLogin) {
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('password', password);
+        const response = await api.post('/token', formData);
+        localStorage.setItem('token', response.data.access_token);
+        setToken(response.data.access_token);
+      } else {
+        await api.post('/register', { username, password });
+        // After registration, login automatically
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('password', password);
+        const response = await api.post('/token', formData);
+        localStorage.setItem('token', response.data.access_token);
+        setToken(response.data.access_token);
+      }
     } catch (err) {
-      setError('Invalid username or password');
+      setError(err.response?.data?.detail || (isLogin ? 'Invalid username or password' : 'Registration failed'));
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-xl w-96 border border-gray-700">
-        <h2 className="text-2xl font-bold mb-6 text-center flex items-center justify-center">
-          <Shield className="mr-2 text-blue-500" /> NFI Login
-        </h2>
-        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Username</label>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 text-white p-4">
+      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-700">
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-blue-600/20 p-3 rounded-full mb-4">
+            <Shield className="text-blue-500 size-10" />
+          </div>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight text-center">
+            {isLogin ? 'Welcome Back' : 'Create Admin Account'}
+          </h2>
+          <p className="text-gray-400 mt-2 text-sm text-center">
+            {isLogin ? 'Enter your credentials to access NFI' : 'Set up the initial administrator user'}
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-900/30 border border-red-800 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm flex items-center">
+            <AlertCircle className="mr-2 size-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-semibold mb-1.5 text-gray-300">Username</label>
             <input
               type="text"
-              className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 outline-none"
+              className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+              placeholder="admin"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
             />
           </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-1">Password</label>
+          <div>
+            <label className="block text-sm font-semibold mb-1.5 text-gray-300">Password</label>
             <input
               type="password"
-              className="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 outline-none"
+              className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold transition">
-            Login
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded-lg font-bold transition shadow-lg shadow-blue-900/20">
+            {isLogin ? 'Sign In' : 'Create Account'}
           </button>
         </form>
+
+        {userCount > 0 && (
+          <div className="mt-8 pt-6 border-t border-gray-700 text-center">
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-blue-500 hover:text-blue-400 text-sm font-medium transition"
+            >
+              {isLogin ? "Don't have an account? Create one" : "Already have an account? Sign in"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -172,7 +229,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
 
   if (!token) {
-    return <Login setToken={setToken} />;
+    return <Auth setToken={setToken} />;
   }
 
   return (
