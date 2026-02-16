@@ -115,7 +115,6 @@ const Auth = ({ setToken }) => {
             <input
               type="text"
               className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
-              placeholder="admin"
               autoComplete={isLogin ? "username" : "new-password"}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -127,7 +126,6 @@ const Auth = ({ setToken }) => {
             <input
               type="password"
               className="w-full p-3 rounded-lg bg-gray-700/50 border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
-              placeholder="••••••••"
               autoComplete={isLogin ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}

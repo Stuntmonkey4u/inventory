@@ -43,6 +43,21 @@ const Hosts = () => {
     fetchHosts();
   }, []);
 
+  // Polling for running scans
+  useEffect(() => {
+    const hasRunningScan = Object.values(scans).some(hostScans =>
+      hostScans.length > 0 && hostScans[0].status === 'running'
+    );
+
+    if (hasRunningScan) {
+      const interval = setInterval(() => {
+        // Re-fetch all hosts to get updated scan statuses
+        fetchHosts();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [scans]);
+
   const handleAddHost = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -71,9 +86,10 @@ const Hosts = () => {
   const handleRunScan = async (id) => {
     try {
       await api.post(`/hosts/${id}/scan`);
-      alert('Scan triggered successfully!');
+      // Refresh scans for this host immediately
+      fetchScans(id);
     } catch (err) {
-      alert('Failed to trigger scan');
+      alert(err.response?.data?.detail || 'Failed to trigger scan');
     }
   };
 
@@ -119,22 +135,29 @@ const Hosts = () => {
                   </td>
                   <td className="p-4">
                     {scans[host.id] && scans[host.id].length > 0 ? (
-                      <div className="flex items-center space-x-2">
-                        {scans[host.id][0].status === 'success' ? (
-                          <CheckCircle size={16} className="text-green-500" />
-                        ) : (
-                          <XCircle size={16} className="text-red-500" />
-                        )}
-                        <span className="text-xs text-gray-400">
-                          {new Date(scans[host.id][0].timestamp).toLocaleString()}
-                        </span>
-                        <Link
-                          to={`/scans/${scans[host.id][0].id}`}
-                          className="text-blue-500 hover:text-blue-400"
-                        >
-                          <FileText size={14} />
-                        </Link>
-                      </div>
+                      scans[host.id][0].status === 'running' ? (
+                        <div className="flex items-center text-blue-400">
+                          <Loader2 className="animate-spin mr-2" size={16} />
+                          <span className="text-xs font-medium">updating...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          {scans[host.id][0].status === 'success' ? (
+                            <CheckCircle size={16} className="text-green-500" />
+                          ) : (
+                            <XCircle size={16} className="text-red-500" />
+                          )}
+                          <span className="text-xs text-gray-400">
+                            {new Date(scans[host.id][0].timestamp).toLocaleString()}
+                          </span>
+                          <Link
+                            to={`/scans/${scans[host.id][0].id}`}
+                            className="text-blue-500 hover:text-blue-400"
+                          >
+                            <FileText size={14} />
+                          </Link>
+                        </div>
+                      )
                     ) : (
                       <span className="text-xs text-gray-500">No scans yet</span>
                     )}
@@ -142,8 +165,9 @@ const Hosts = () => {
                   <td className="p-4 text-right space-x-2">
                     <button
                       onClick={() => handleRunScan(host.id)}
+                      disabled={scans[host.id] && scans[host.id].length > 0 && scans[host.id][0].status === 'running'}
                       title="Run Scan"
-                      className="p-2 text-green-500 hover:bg-green-900/30 rounded transition"
+                      className="p-2 text-green-500 hover:bg-green-900/30 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <Play size={18} />
                     </button>

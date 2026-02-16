@@ -100,8 +100,27 @@ async def trigger_scan(host_id: int, background_tasks: BackgroundTasks, db: Sess
     if not host:
         raise HTTPException(status_code=404, detail="Host not found")
 
-    background_tasks.add_task(ansible_runner.run_ansible_scan, host_id, db)
-    return {"message": "Scan triggered successfully"}
+    # Check if a scan is already running for this host
+    running_scan = db.query(models.ScanResult).filter(
+        models.ScanResult.host_id == host_id,
+        models.ScanResult.status == "running"
+    ).first()
+
+    if running_scan:
+        raise HTTPException(status_code=400, detail="A scan is already running for this host")
+
+    # Create a placeholder scan result with 'running' status
+    scan_result = models.ScanResult(
+        host_id=host_id,
+        status="running",
+        data={}
+    )
+    db.add(scan_result)
+    db.commit()
+    db.refresh(scan_result)
+
+    background_tasks.add_task(ansible_runner.run_ansible_scan, host_id, scan_result.id)
+    return {"message": "Scan triggered successfully", "scan_id": scan_result.id}
 
 @app.get("/hosts/{host_id}/scans", response_model=List[schemas.ScanResult])
 def get_host_scans(host_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.get_current_user)):
