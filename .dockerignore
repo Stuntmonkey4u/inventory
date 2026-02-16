@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.db
+.db-journal
+test.db
+.git
+.gitignore
+*.log
