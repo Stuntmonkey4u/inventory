@@ -37,6 +37,16 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.post("/register", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
+    # Check if any user already exists
+    existing_any_user = db.query(models.User).first()
+    if existing_any_user:
+        # In a real app, you might only allow an admin to create other users
+        # For this "single user" priority tool, we'll block new registrations if one exists
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled as an admin user already exists."
+        )
+
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")

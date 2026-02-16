@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Any
 from datetime import datetime
+import re
 
 class UserBase(BaseModel):
     username: str
@@ -23,9 +24,18 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 class HostBase(BaseModel):
-    hostname: str
+    hostname: str = Field(..., min_length=1, max_length=255)
     ip_address: str
-    ssh_user: str
+    ssh_user: str = Field(..., min_length=1)
+
+    @validator('ip_address')
+    def validate_ip(cls, v):
+        # Basic IPv4 and simple hostname validation
+        ipv4_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        hostname_pattern = r'^[a-zA-Z0-9\.\-]+$'
+        if not re.match(ipv4_pattern, v) and not re.match(hostname_pattern, v):
+            raise ValueError('Must be a valid IP address or hostname')
+        return v
 
 class HostCreate(HostBase):
     ssh_password: Optional[str] = None

@@ -20,7 +20,9 @@ services:
       - ./backend:/app
       - ./inventory_report.yml:/app/inventory_report.yml
       - ./templates:/app/templates
-      - ./inventory.ini:/app/inventory.ini
+      - ./aide.conf:/app/aide.conf
+      - nfi_aide_baselines:/app/aide_baselines
+      - nfi_reports:/app/reports
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-nfi_user}:${POSTGRES_PASSWORD:-nfi_password}@db:5432/${POSTGRES_DB:-nfi_db}
       SECRET_KEY: ${SECRET_KEY:-supersecretkey}
@@ -45,3 +47,5 @@ services:
 
 volumes:
   postgres_data:
+  nfi_aide_baselines:
+  nfi_reports:

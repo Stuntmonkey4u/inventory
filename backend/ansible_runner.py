@@ -2,10 +2,11 @@ import os
 import json
 import subprocess
 import tempfile
-import shutil
-from datetime import datetime
+import logging
 from sqlalchemy.orm import Session
 import models, security
+
+logger = logging.getLogger(__name__)
 
 def run_ansible_scan(host_id: int, db: Session):
     host = db.query(models.Host).filter(models.Host.id == host_id).first()
@@ -46,10 +47,22 @@ def run_ansible_scan(host_id: int, db: Session):
         with open(inventory_path, "w") as f:
             json.dump(inventory, f)
 
-        # Run ansible-playbook
-        # We need to make sure we point to the correct playbook path
-        # Assuming we are in backend/ and playbook is in root
-        playbook_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "inventory_report.yml")
+        # Robust path finding for the playbook
+        # Check current dir, then parent, then /app (Docker)
+        possible_paths = [
+            "inventory_report.yml",
+            "../inventory_report.yml",
+            "/app/inventory_report.yml"
+        ]
+        playbook_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                playbook_path = p
+                break
+
+        if not playbook_path:
+            # Fallback to absolute path relative to this file
+            playbook_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "inventory_report.yml")
 
         cmd = [
             "ansible-playbook",
@@ -58,45 +71,69 @@ def run_ansible_scan(host_id: int, db: Session):
             "-e", f"report_dir={tmpdir}"
         ]
 
-        process = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            # Add a 10-minute timeout for the scan
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
-        if process.returncode == 0:
-            # Find the generated JSON report
-            report_file = None
-            for file in os.listdir(tmpdir):
-                if file.endswith(".report.json"):
-                    report_file = os.path.join(tmpdir, file)
-                    break
+            # Sanitization function to remove passwords from output
+            def sanitize(text: str) -> str:
+                if not text: return ""
+                if host.ssh_password:
+                    pass_val = security.decrypt_data(host.ssh_password)
+                    text = text.replace(pass_val, "********")
+                return text
 
-            if report_file:
-                with open(report_file, "r") as f:
-                    # The host report file contains { "hostname": { ...data... } }
-                    report_data_raw = json.load(f)
-                    # Extract the data for this host
-                    report_data = report_data_raw.get(host.hostname, report_data_raw)
+            if process.returncode == 0:
+                report_file = None
+                for file in os.listdir(tmpdir):
+                    if file.endswith(".report.json"):
+                        report_file = os.path.join(tmpdir, file)
+                        break
 
-                    # Save to database
+                if report_file:
+                    with open(report_file, "r") as f:
+                        report_data_raw = json.load(f)
+                        report_data = report_data_raw.get(host.hostname, report_data_raw)
+
+                        scan_result = models.ScanResult(
+                            host_id=host.id,
+                            data=report_data,
+                            status="success"
+                        )
+                        db.add(scan_result)
+                        db.commit()
+                else:
                     scan_result = models.ScanResult(
                         host_id=host.id,
-                        data=report_data,
-                        status="success"
+                        data={"error": "Report file not found", "stdout": sanitize(process.stdout)},
+                        status="failed"
                     )
                     db.add(scan_result)
                     db.commit()
             else:
-                # No report file found
                 scan_result = models.ScanResult(
                     host_id=host.id,
-                    data={"error": "Report file not found", "stdout": process.stdout},
+                    data={
+                        "error": "Ansible execution failed",
+                        "stdout": sanitize(process.stdout),
+                        "stderr": sanitize(process.stderr)
+                    },
                     status="failed"
                 )
                 db.add(scan_result)
                 db.commit()
-        else:
-            # Ansible failed
+        except subprocess.TimeoutExpired:
             scan_result = models.ScanResult(
                 host_id=host.id,
-                data={"error": "Ansible execution failed", "stdout": process.stdout, "stderr": process.stderr},
+                data={"error": "Scan timed out after 10 minutes"},
+                status="failed"
+            )
+            db.add(scan_result)
+            db.commit()
+        except Exception as e:
+            scan_result = models.ScanResult(
+                host_id=host.id,
+                data={"error": f"Unexpected error: {str(e)}"},
                 status="failed"
             )
             db.add(scan_result)
